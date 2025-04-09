@@ -1,0 +1,94 @@
+# Copyright (C) 2025 Adalberto H. Vega
+# This file is distributed under the GPL v2 or later.
+msgid ""
+msgstr ""
+"Project-Id-Version: WP Read Tools 1.0.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/wp-read-tools\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2025-04-08T05:19:00+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.11.0\n"
+"X-Domain: wp-read-tools\n"
+
+#. Plugin Name of the plugin
+#: wp-read-tools.php
+msgid "WP Read Tools"
+msgstr ""
+
+#. Plugin URI of the plugin
+#: wp-read-tools.php
+msgid "https://github.com/ahvega/wp-read-tools"
+msgstr ""
+
+#. Description of the plugin
+#: wp-read-tools.php
+msgid "Provides reading time estimation and a text-to-speech feature for WordPress posts via a shortcode."
+msgstr ""
+
+#. Author of the plugin
+#: wp-read-tools.php
+msgid "Adalberto H. Vega"
+msgstr ""
+
+#. Author URI of the plugin
+#: wp-read-tools.php
+msgid "https://inteldevign.com"
+msgstr ""
+
+#: includes/class-wp-read-tools-ajax.php:47
+msgid "Security check failed."
+msgstr ""
+
+#: includes/class-wp-read-tools-ajax.php:56
+msgid "Error: Post ID not provided."
+msgstr ""
+
+#: includes/class-wp-read-tools-ajax.php:66
+msgid "Error: Invalid post ID."
+msgstr ""
+
+#: includes/class-wp-read-tools-ajax.php:77
+msgid "Error: Post not found or not accessible."
+msgstr ""
+
+#: includes/class-wp-read-tools-ajax.php:88
+msgid "Error retrieving post content."
+msgstr ""
+
+#: includes/class-wp-read-tools-enqueue.php:72
+msgid "Reading..."
+msgstr ""
+
+#: includes/class-wp-read-tools-enqueue.php:73
+msgid "Pause"
+msgstr ""
+
+#: includes/class-wp-read-tools-enqueue.php:74
+msgid "Resume"
+msgstr ""
+
+#: includes/class-wp-read-tools-enqueue.php:75
+msgid "Error fetching content."
+msgstr ""
+
+#: includes/class-wp-read-tools-shortcode.php:62
+msgid "Listen"
+msgstr ""
+
+#. translators: %s: Estimated reading time in minutes (potentially with decimals).
+#: includes/class-wp-read-tools-shortcode.php:99
+msgid "Estimated reading time: %s minutes"
+msgstr ""
+
+#: includes/class-wp-read-tools-shortcode.php:104
+msgid "Listen to this article"
+msgstr ""
+
+#. translators: %s: Reading time rounded to nearest half minute.
+#: includes/class-wp-read-tools-shortcode.php:113
+msgid "%s min read"
+msgstr ""

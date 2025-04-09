@@ -1,0 +1,47 @@
+.readtime {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.read-time-line,
+.read-aloud-line {
+  display: flex;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.read-time-line i.fas.fa-stopwatch,
+.read-aloud-line a.read-aloud-trigger i.fas {
+  margin-right: 5px;
+  width: 1.2em;
+  text-align: center;
+  color: var(--e-global-color-accent); /* Consider making this color configurable or less specific */
+}
+
+.read-aloud-line a.read-aloud-trigger {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.read-aloud-line a.read-aloud-trigger.disabled { /* Style for disabled state (if needed) */
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.read-aloud-line a.read-aloud-trigger i.fa-spinner { /* Style for loading spinner */
+  margin-right: 5px;
+  /* Add animation if not handled by Font Awesome's fa-spin */
+}
+
+/* Add styles for loading state if desired */
+.read-aloud-line a.read-aloud-trigger.read-aloud-loading {
+  /* Example: slightly dimmer */
+  /* opacity: 0.8; */
+}
