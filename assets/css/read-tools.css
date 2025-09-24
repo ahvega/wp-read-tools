@@ -45,3 +45,41 @@
   /* Example: slightly dimmer */
   /* opacity: 0.8; */
 }
+
+/* Focus states for accessibility */
+.read-aloud-line a.read-aloud-trigger:focus {
+  outline: 2px solid #005caa;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .read-aloud-line a.read-aloud-trigger:focus {
+    outline: 3px solid;
+    outline-offset: 3px;
+  }
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  .read-aloud-line a.read-aloud-trigger i.fa-spinner {
+    animation: none !important;
+  }
+
+  .read-aloud-line a.read-aloud-trigger i {
+    transition: none !important;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .read-aloud-line a.read-aloud-trigger:focus {
+    outline-color: #4f94cd;
+  }
+
+  .read-time-line i.fas.fa-stopwatch,
+  .read-aloud-line a.read-aloud-trigger i.fas {
+    color: #4f94cd;
+  }
+}

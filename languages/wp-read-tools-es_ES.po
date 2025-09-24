@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-04-08T05:19:00+00:00\n"
+"POT-Creation-Date: 2024-12-24T12:00:00+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.11.0\n"
 "X-Domain: wp-read-tools\n"
@@ -39,56 +39,60 @@ msgstr "Adalberto H. Vega"
 msgid "https://inteldevign.com"
 msgstr "https://inteldevign.com"
 
-#: includes/class-wp-read-tools-ajax.php:47
+#: includes/class-wp-read-tools-ajax.php:84
+msgid "Too many requests. Please try again later."
+msgstr "Demasiadas solicitudes. Por favor, inténtalo de nuevo más tarde."
+
+#: includes/class-wp-read-tools-ajax.php:95
 msgid "Security check failed."
 msgstr "Falló la verificación de seguridad."
 
-#: includes/class-wp-read-tools-ajax.php:56
+#: includes/class-wp-read-tools-ajax.php:104
 msgid "Error: Post ID not provided."
 msgstr "Error: No se proporcionó el ID de la entrada."
 
-#: includes/class-wp-read-tools-ajax.php:66
+#: includes/class-wp-read-tools-ajax.php:114
 msgid "Error: Invalid post ID."
 msgstr "Error: ID de entrada inválido."
 
-#: includes/class-wp-read-tools-ajax.php:77
+#: includes/class-wp-read-tools-ajax.php:133
 msgid "Error: Post not found or not accessible."
 msgstr "Error: Entrada no encontrada o no accesible."
 
-#: includes/class-wp-read-tools-ajax.php:88
+#: includes/class-wp-read-tools-ajax.php:144
 msgid "Error retrieving post content."
 msgstr "Error al recuperar el contenido de la entrada."
 
-#: includes/class-wp-read-tools-enqueue.php:72
+#: includes/class-wp-read-tools-enqueue.php:125
 msgid "Reading..."
 msgstr "Leyendo..."
 
-#: includes/class-wp-read-tools-enqueue.php:73
+#: includes/class-wp-read-tools-enqueue.php:126
 msgid "Pause"
 msgstr "Pausar"
 
-#: includes/class-wp-read-tools-enqueue.php:74
+#: includes/class-wp-read-tools-enqueue.php:127
 msgid "Resume"
 msgstr "Continuar"
 
-#: includes/class-wp-read-tools-enqueue.php:75
+#: includes/class-wp-read-tools-enqueue.php:128
 msgid "Error fetching content."
 msgstr "Error al obtener el contenido."
 
-#: includes/class-wp-read-tools-shortcode.php:62
+#: includes/class-wp-read-tools-shortcode.php:111
 msgid "Listen"
 msgstr "Escuchar"
 
 #. translators: %s: Estimated reading time in minutes (potentially with decimals).
-#: includes/class-wp-read-tools-shortcode.php:99
+#: includes/class-wp-read-tools-shortcode.php:156
 msgid "Estimated reading time: %s minutes"
 msgstr "Tiempo estimado de lectura: %s minutos"
 
-#: includes/class-wp-read-tools-shortcode.php:104
+#: includes/class-wp-read-tools-shortcode.php:161
 msgid "Listen to this article"
 msgstr "Escuchar este artículo"
 
 #. translators: %s: Reading time rounded to nearest half minute.
-#: includes/class-wp-read-tools-shortcode.php:113
+#: includes/class-wp-read-tools-shortcode.php:171
 msgid "%s min read"
 msgstr "Lectura %s min."

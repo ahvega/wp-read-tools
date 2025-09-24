@@ -1,18 +1,63 @@
+/**
+ * WP Read Tools - Frontend Text-to-Speech Functionality
+ *
+ * This script handles the text-to-speech functionality for the WP Read Tools plugin.
+ * It manages speech synthesis, pause/resume controls, voice selection, and AJAX
+ * communication with the WordPress backend.
+ *
+ * @package    WP_Read_Tools
+ * @subpackage assets/js
+ * @since      1.0.0
+ * @author     Adalberto H. Vega <contacto@inteldevign.com>
+ *
+ * @requires   jQuery
+ * @requires   readAloudSettings (localized from PHP)
+ */
+
+/**
+ * Global speech state management object.
+ * Tracks the current state of speech synthesis across all instances.
+ *
+ * @namespace
+ * @global
+ * @since 1.0.0
+ *
+ * @property {boolean}                isPaused         Whether speech is currently paused
+ * @property {SpeechSynthesisUtterance|null} currentUtterance Current speech utterance object
+ * @property {number}                 resumePoint      Position to resume from (future use)
+ */
+
 jQuery(document).ready(function($) {
-    // Add global state tracking
+    /**
+     * Initialize global speech state tracking.
+     * This object maintains the state of speech synthesis across the application.
+     */
     window.speechState = {
         isPaused: false,
         currentUtterance: null,
         resumePoint: 0
     };
 
+    /**
+     * Main click event handler for read-aloud trigger links.
+     *
+     * Handles all text-to-speech functionality including:
+     * - Pause/resume controls for active speech
+     * - Stopping current speech when switching between posts
+     * - AJAX requests to fetch post content
+     * - Speech synthesis with voice selection
+     * - UI state management and visual feedback
+     *
+     * @since 1.0.0
+     *
+     * @param {Event} e - The click event object
+     */
     $('.read-aloud-trigger').on('click', function(e) {
         e.preventDefault();
         const link = $(this);
         const postId = link.data('post-id');
         const icon = link.find('.fas');
         const originalLinkText = link.contents().filter(function() { return this.nodeType === 3; }).text().trim(); // More robust way to get text node
-        let isPlaying = false; // Track the playing state
         let utterance = null; // Store the utterance object
         let currentLink = link; // Keep track of the link being processed
 
@@ -52,7 +97,6 @@ jQuery(document).ready(function($) {
              window.activeReadAloudIcon = null;
              window.originalReadAloudText = null;
              utterance = null;
-             isPlaying = false;
 
 
             // If the click was on the link that was already playing, just stop and return
@@ -167,23 +211,59 @@ jQuery(document).ready(function($) {
         }
     });
 
-     // Function to find and set the voice
-     function findAndSetVoice(utterance, langCode) {
-         const voices = window.speechSynthesis.getVoices();
-         let femaleVoice = voices.find(v => v.lang.startsWith(langCode) && (v.name.includes('Female') || v.gender === 'female'));
-         let anyVoice = voices.find(v => v.lang.startsWith(langCode));
+    /**
+     * Finds and sets the optimal voice for speech synthesis.
+     *
+     * Attempts to select the best available voice for the given language code
+     * with preference for female voices, then any voice matching the language,
+     * then default voice, and finally the first available voice.
+     *
+     * @since 1.0.0
+     *
+     * @param {SpeechSynthesisUtterance} utterance - The speech utterance object to configure
+     * @param {string} langCode - Two-letter language code (e.g., 'en', 'es', 'fr')
+     *
+     * @return {void}
+     */
+    function findAndSetVoice(utterance, langCode) {
+        const voices = window.speechSynthesis.getVoices();
 
-         utterance.voice = femaleVoice || anyVoice || voices.find(v => v.default) || voices[0]; // Fallback chain
-     }
+        // Prefer female voices for better user experience
+        let femaleVoice = voices.find(v =>
+            v.lang.startsWith(langCode) &&
+            (v.name.includes('Female') || v.gender === 'female')
+        );
 
+        // Fallback to any voice in the target language
+        let anyVoice = voices.find(v => v.lang.startsWith(langCode));
 
-     // Function to handle speaking and event listeners
-     function speakUtterance(utterance, link, icon, originalLinkText) {
+        // Fallback chain: female voice -> language match -> default -> first available
+        utterance.voice = femaleVoice || anyVoice || voices.find(v => v.default) || voices[0];
+    }
+
+    /**
+     * Initiates speech synthesis and sets up event listeners.
+     *
+     * This function handles the actual speech synthesis process including:
+     * - Starting the speech with the configured utterance
+     * - Setting up UI state changes (loading to pause button)
+     * - Configuring event handlers for speech end and error states
+     * - Managing visual feedback during speech playback
+     *
+     * @since 1.0.0
+     *
+     * @param {SpeechSynthesisUtterance} utterance - The configured speech utterance
+     * @param {jQuery} link - The jQuery object for the trigger link
+     * @param {jQuery} icon - The jQuery object for the icon element
+     * @param {string} originalLinkText - Original text of the link for reset purposes
+     *
+     * @return {void}
+     */
+    function speakUtterance(utterance, link, icon, originalLinkText) {
          icon.removeClass('fa-spinner fa-spin').addClass('fa-pause');
          updateLinkText(link, readAloudSettings.pauseText);
          link.removeClass('read-aloud-loading');
          speechSynthesis.speak(utterance);
-         isPlaying = true;
 
          utterance.onend = function() {
              if (link.is(window.activeReadAloudLink)) { // Only reset if this is the active link
@@ -204,15 +284,45 @@ jQuery(document).ready(function($) {
      }
 
 
-    // Helper function to update link text (targets only the text node)
+    /**
+     * Updates the text content of a link while preserving icon elements.
+     *
+     * This function specifically targets text nodes within the link element,
+     * leaving icon elements intact. It's used to change button text between
+     * states like "Listen", "Pause", "Resume", etc.
+     *
+     * @since 1.0.0
+     *
+     * @param {jQuery} link - The jQuery object for the link element
+     * @param {string} newText - New text content to display
+     *
+     * @return {void}
+     */
     function updateLinkText(link, newText) {
         link.contents().filter(function() {
             return this.nodeType === 3; // Node.TEXT_NODE
         }).replaceWith(' ' + newText); // Add space for separation from icon
     }
 
-     // Helper function to reset link state
-     function resetLinkState(link, icon, originalText) {
+    /**
+     * Resets the visual and functional state of a read-aloud link.
+     *
+     * This function performs complete cleanup of a read-aloud link including:
+     * - Restoring original icon (headphones)
+     * - Resetting link text to original state
+     * - Clearing CSS classes for loading states
+     * - Cleaning up global state variables
+     * - Resetting speech synthesis state
+     *
+     * @since 1.0.0
+     *
+     * @param {jQuery} link - The jQuery object for the link element
+     * @param {jQuery} icon - The jQuery object for the icon element
+     * @param {string} originalText - Original link text to restore
+     *
+     * @return {void}
+     */
+    function resetLinkState(link, icon, originalText) {
          // Remove all possible states and add headphones icon with proper spacing
          icon.removeClass('fa-pause fa-play fa-spinner fa-spin')
              .removeClass('fas') // Remove the base class
@@ -229,14 +339,23 @@ jQuery(document).ready(function($) {
              resumePoint: 0
          };
          utterance = null;
-         isPlaying = false;
      }
 
 
-     // Ensure speech is stopped if the user navigates away
-     $(window).on('beforeunload', function() {
-         if (speechSynthesis.speaking || speechSynthesis.pending) {
-             speechSynthesis.cancel();
-         }
-     });
+    /**
+     * Cleanup handler for page navigation.
+     *
+     * Ensures that any active speech synthesis is properly cancelled when
+     * the user navigates away from the page. This prevents speech from
+     * continuing to play after the page has changed.
+     *
+     * @since 1.0.0
+     *
+     * @listens window:beforeunload
+     */
+    $(window).on('beforeunload', function() {
+        if (speechSynthesis.speaking || speechSynthesis.pending) {
+            speechSynthesis.cancel();
+        }
+    });
 });

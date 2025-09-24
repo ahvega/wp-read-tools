@@ -1,9 +1,15 @@
 <?php
 /**
- * Handles the [readtime] shortcode for the WP Read Tools plugin.
+ * Shortcode handler for the WP Read Tools plugin.
  *
- * @package WP_Read_Tools
- * @since   1.0.0
+ * This file contains the WP_Read_Tools_Shortcode class which handles the
+ * registration and rendering of the [readtime] shortcode. It calculates
+ * reading time estimates and optionally provides text-to-speech functionality.
+ *
+ * @package    WP_Read_Tools
+ * @subpackage WP_Read_Tools/includes
+ * @since      1.0.0
+ * @author     Adalberto H. Vega <contacto@inteldevign.com>
  */
 
 // Exit if accessed directly.
@@ -12,29 +18,53 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Class WP_Read_Tools_Shortcode
+ * Shortcode handler class for WP Read Tools plugin.
  *
- * Registers and renders the [readtime] shortcode.
+ * This class manages the [readtime] shortcode functionality, including:
+ * - Reading time calculation based on word count and reading speed
+ * - Text-to-speech integration with customizable parameters
+ * - Localization support for different number formats
+ * - Accessibility features with proper ARIA attributes
+ *
+ * @since      1.0.0
+ * @package    WP_Read_Tools
+ * @subpackage WP_Read_Tools/includes
+ * @author     Adalberto H. Vega <contacto@inteldevign.com>
  */
 class WP_Read_Tools_Shortcode {
 
 	/**
-	 * Initialize hooks. Registers the shortcode.
+	 * Initialize shortcode registration.
 	 *
-	 * @since 1.0.0
+	 * Registers the [readtime] shortcode with WordPress to enable
+	 * reading time estimation and text-to-speech functionality.
+	 *
+	 * @since  1.0.0
+	 * @access public
+	 * @static
+	 *
+	 * @return void
 	 */
 	public static function init() {
 		add_shortcode( 'readtime', array( __CLASS__, 'render_shortcode' ) );
 	}
 
 	/**
-	 * Format numbers according to locale, with special handling for Latin American Spanish.
+	 * Format numbers according to locale with special handling for Spanish.
 	 *
-	 * @param float $number    The number to format
-	 * @param int   $decimals  Number of decimal points
-	 * @return string          Formatted number
+	 * Provides localized number formatting with special consideration for
+	 * Latin American Spanish locales, which use different decimal and
+	 * thousands separators than other locales.
+	 *
+	 * @since  1.0.0
+	 * @access private
+	 * @static
+	 *
+	 * @param  float $number   The number to format.
+	 * @param  int   $decimals Number of decimal places. Default 0.
+	 * @return string          Formatted number according to locale.
 	 */
-	private static function format_number($number, $decimals = 0) {
+	private static function format_number( $number, $decimals = 0 ) {
 		$locale = determine_locale();
 
 		// For Spanish locales, use Latin American format (period for decimals, comma for thousands)
@@ -98,13 +128,20 @@ class WP_Read_Tools_Shortcode {
 			$wpm = 180; // Reset to default if invalid.
 		}
 
+		// Allow filtering of WPM based on post context
+		$wpm = apply_filters( 'wp_read_tools_wpm', $wpm, $post_id );
+
 		// Get the post content.
 		$content = get_post_field( 'post_content', $post_id );
 
 		// Remove shortcodes and HTML tags to get a clean word count.
 		$stripped_content = strip_shortcodes( $content );
 		$stripped_content = wp_strip_all_tags( $stripped_content );
-		$word_count       = str_word_count( $stripped_content );
+
+		// Allow filtering of content before word count calculation
+		$stripped_content = apply_filters( 'wp_read_tools_content_before_count', $stripped_content, $post_id );
+
+		$word_count = str_word_count( $stripped_content );
 
 		// Calculate reading time in minutes.
 		$minutes_exact = ( $word_count > 0 && $wpm > 0 ) ? ( $word_count / $wpm ) : 0;
@@ -129,9 +166,12 @@ class WP_Read_Tools_Shortcode {
 		// Reading time line.
 		$output .= '<span class="read-time-line" title="' . esc_attr( $read_time_tooltip_text ) . '">';
 		$output .= '<i class="fas fa-stopwatch" aria-hidden="true"></i> '; // Added aria-hidden for decorative icon.
-		/* translators: %s: Reading time rounded to nearest half minute. */
-		$output .= sprintf( esc_html__( '%s min read', 'wp-read-tools' ),
-			self::format_number($rounded_minutes, 1)
+
+		// Allow filtering of time format
+		$time_format = apply_filters( 'wp_read_tools_time_format', __( '%s min read', 'wp-read-tools' ), $rounded_minutes, $post_id );
+
+		$output .= sprintf( esc_html( $time_format ),
+			self::format_number( $rounded_minutes, 1 )
 		);
 		$output .= '</span>';
 
