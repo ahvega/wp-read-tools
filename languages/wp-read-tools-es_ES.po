@@ -96,3 +96,7 @@ msgstr "Escuchar este artículo"
 #: includes/class-wp-read-tools-shortcode.php:171
 msgid "%s min read"
 msgstr "Lectura %s min."
+
+#: includes/class-wp-read-tools-ajax.php:170
+msgid "Post content is empty."
+msgstr "El contenido de la entrada está vacío."

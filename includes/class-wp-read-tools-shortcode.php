@@ -77,6 +77,89 @@ class WP_Read_Tools_Shortcode {
 	}
 
 	/**
+	 * Enhanced content detection for page builders and custom content areas.
+	 *
+	 * IMPORTANT NOTE FOR PAGE BUILDER USERS (Avada, Elementor, etc.):
+	 * For optimal functionality, ensure your post content is included in WordPress's
+	 * native post content field (the main editor), not exclusively in page builder modules.
+	 * The plugin will extract content from page builders as a secondary source, but
+	 * works best when there's at least a summary in the native content field.
+	 *
+	 * Attempts to retrieve post content using multiple strategies:
+	 * 1. Custom content ID selector (if provided via shortcode parameter)
+	 * 2. Avada Builder content detection from meta fields
+	 * 3. Elementor content detection from JSON data
+	 * 4. Standard post content fallback (always recommended to populate)
+	 *
+	 * Content Detection Priority:
+	 * - Primary: Native WordPress post content field (post_content)
+	 * - Secondary: Page builder meta fields (_avada_page_content, _elementor_data, etc.)
+	 * - Fallback: Frontend content extraction (marked for JavaScript processing)
+	 *
+	 * @since  1.0.1
+	 * @access private
+	 * @static
+	 *
+	 * @param  int    $post_id    Post ID to retrieve content for.
+	 * @param  string $content_id Optional CSS selector ID for custom content container.
+	 * @return string             Post content or empty string if not found.
+	 */
+	private static function get_post_content_enhanced( $post_id, $content_id = '' ) {
+		$content = '';
+
+		// Strategy 1: Use custom content ID if provided
+		if ( ! empty( $content_id ) ) {
+			// Store the selector for JavaScript to use
+			update_post_meta( $post_id, '_wp_read_tools_content_selector', $content_id );
+		}
+
+		// Strategy 2: Detect Avada Builder content
+		if ( function_exists( 'avada_get_theme_option' ) || class_exists( 'FusionBuilder' ) || get_template() === 'Avada' ) {
+			// Check for Avada page content
+			$avada_content = get_post_meta( $post_id, '_avada_page_content', true );
+			if ( ! empty( $avada_content ) ) {
+				$content = $avada_content;
+			}
+
+			// Alternative: Check if this is an Avada-built page
+			$fusion_page_data = get_post_meta( $post_id, 'fusion_builder_status', true );
+
+			if ( $fusion_page_data === 'active' && empty( $content ) ) {
+				// For Avada Builder pages, we'll rely on frontend content extraction
+				update_post_meta( $post_id, '_wp_read_tools_needs_frontend_extraction', 'yes' );
+			}
+
+			// Force frontend extraction for all Avada pages if content is minimal
+			if ( empty( trim( strip_tags( $content ) ) ) || strlen( trim( strip_tags( $content ) ) ) < 100 ) {
+				update_post_meta( $post_id, '_wp_read_tools_needs_frontend_extraction', 'yes' );
+			}
+		}
+
+		// Strategy 3: Detect Elementor content
+		if ( empty( $content ) && defined( 'ELEMENTOR_VERSION' ) ) {
+			if ( \Elementor\Plugin::$instance->db->is_built_with_elementor( $post_id ) ) {
+				// For Elementor, we need frontend extraction
+				update_post_meta( $post_id, '_wp_read_tools_needs_frontend_extraction', 'yes' );
+			}
+		}
+
+		// Strategy 4: Standard post content fallback
+		if ( empty( $content ) ) {
+			$content = get_post_field( 'post_content', $post_id );
+		}
+
+		// Log content detection for debugging
+		wp_read_tools_log( sprintf(
+			'Content detection for post %d: length=%d, needs_frontend=%s',
+			$post_id,
+			strlen( $content ),
+			get_post_meta( $post_id, '_wp_read_tools_needs_frontend_extraction', true ) ?: 'no'
+		) );
+
+		return $content;
+	}
+
+	/**
 	 * Renders the HTML output for the [readtime] shortcode.
 	 *
 	 * Calculates the estimated reading time for the current post and optionally displays
@@ -92,6 +175,7 @@ class WP_Read_Tools_Shortcode {
 	 *     @type int    $wpm        Reading speed in words per minute. Default 180.
 	 *     @type string $link_text  Text for the read-aloud link. Default 'Listen'.
 	 *     @type string $icon_class Font Awesome icon class for the read-aloud button. Default 'fas fa-headphones'.
+	 *     @type string $content_id CSS selector ID for custom content container. Default empty (uses post content).
 	 * }
 	 * @return string HTML output for the shortcode. Returns empty string if post ID is not found.
 	 */
@@ -110,6 +194,7 @@ class WP_Read_Tools_Shortcode {
 				'wpm'        => 180,     // Average reading speed (words per minute).
 				'link_text'  => __( 'Listen', 'wp-read-tools' ), // Translatable link text.
 				'icon_class' => 'fas fa-headphones', // Ensure space between classes
+				'content_id' => '',      // CSS selector ID for custom content container
 			),
 			$atts,
 			'readtime' // Shortcode tag used for filtering attributes.
@@ -122,6 +207,7 @@ class WP_Read_Tools_Shortcode {
 		$link_text  = sanitize_text_field( $atts['link_text'] );
 		// Use sanitize_text_field instead of sanitize_html_class to preserve spaces
 		$icon_class = sanitize_text_field( $atts['icon_class'] );
+		$content_id = sanitize_text_field( $atts['content_id'] );
 
 		// Ensure WPM is reasonable.
 		if ( $wpm < 1 ) {
@@ -131,8 +217,8 @@ class WP_Read_Tools_Shortcode {
 		// Allow filtering of WPM based on post context
 		$wpm = apply_filters( 'wp_read_tools_wpm', $wpm, $post_id );
 
-		// Get the post content.
-		$content = get_post_field( 'post_content', $post_id );
+		// Get the post content using enhanced detection for page builders
+		$content = self::get_post_content_enhanced( $post_id, $content_id );
 
 		// Remove shortcodes and HTML tags to get a clean word count.
 		$stripped_content = strip_shortcodes( $content );

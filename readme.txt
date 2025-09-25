@@ -132,6 +132,28 @@ Yes! WP Read Tools works with any post type including:
 * Custom post types (products, events, etc.)
 * Any content type that supports `the_content()` filter
 
+= Does it work with page builders like Avada and Elementor? =
+
+**Yes, but with important considerations:**
+
+**Content Requirement**: For optimal functionality with theme builders like Avada, Elementor, or similar page builders, ensure your post content is included in WordPress's native post content field (the main editor), not exclusively in page builder modules.
+
+**How it works:**
+* **Primary Source**: Native WordPress content field (recommended)
+* **Secondary Source**: Page builder meta fields (Avada, Elementor)
+* **Fallback**: Frontend content extraction when needed
+
+**Best Practices:**
+* Include at least a summary in the native WordPress editor
+* The plugin automatically detects and extracts content from page builder meta fields
+* For Avada: Content is extracted from `_avada_page_content` and other builder fields
+* For Elementor: Content is parsed from JSON data in `_elementor_data`
+
+**Troubleshooting**: If reading time seems inaccurate:
+1. Add content to the native WordPress post editor
+2. Use the `content_id` parameter: `[readtime content_id="main-content"]`
+3. Check that your page builder content includes readable text
+
 = Can I add reading time automatically to all posts? =
 
 Yes, you can automatically add reading time to posts using theme integration:

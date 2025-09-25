@@ -138,11 +138,21 @@ jQuery(document).ready(function($) {
                      }
 
                     if (response.success) {
-                        const content = response.data.content;
+                        let content = response.data.content;
                         if (!content) {
                              alert(readAloudSettings.errorText || 'Error: Empty content received.');
                              resetLinkState(link, icon, originalLinkText);
                              return;
+                        }
+
+                        // Check if frontend content extraction is needed
+                        if (content.includes('<!-- WP_READ_TOOLS_FRONTEND_EXTRACTION_NEEDED -->')) {
+                            content = extractFrontendContent(postId);
+                            if (!content) {
+                                alert(readAloudSettings.errorText || 'No readable content found on this page.');
+                                resetLinkState(link, icon, originalLinkText);
+                                return;
+                            }
                         }
 
                         utterance = new SpeechSynthesisUtterance(content);
@@ -200,8 +210,29 @@ jQuery(document).ready(function($) {
                      if (!window.activeReadAloudLink || !link.is(window.activeReadAloudLink)) {
                          return; // Another link was clicked, abort this one
                      }
-                    console.error("AJAX error:", status, error, xhr);
-                    alert('Error communicating with the server.'); // Keep generic or localize if needed
+
+                    console.error("WP Read Tools AJAX error:", {
+                        status: status,
+                        error: error,
+                        responseText: xhr.responseText,
+                        statusCode: xhr.status,
+                        postId: postId,
+                        ajaxUrl: readAloudSettings.ajax_url
+                    });
+
+                    let errorMessage = readAloudSettings.errorText || 'Error communicating with the server.';
+
+                    // Try to get more specific error from response
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response && response.data && response.data.message) {
+                            errorMessage = response.data.message;
+                        }
+                    } catch (e) {
+                        // Ignore JSON parse errors, use default message
+                    }
+
+                    alert(errorMessage);
                     resetLinkState(link, icon, originalLinkText);
                 }
             });
@@ -341,6 +372,134 @@ jQuery(document).ready(function($) {
          utterance = null;
      }
 
+
+    /**
+     * Extracts content from the frontend DOM for page builders.
+     *
+     * This function attempts to extract readable content directly from the
+     * page when backend content detection fails (common with page builders).
+     * It tries multiple strategies including custom selectors and common
+     * content containers.
+     *
+     * @since 1.0.1
+     *
+     * @param {number} postId - The post ID for context
+     * @return {string} Extracted content or empty string
+     */
+    function extractFrontendContent(postId) {
+        let content = '';
+
+        // Strategy 1: Check for custom content selector in localized settings
+        if (readAloudSettings.contentSelector) {
+            const customElement = document.querySelector(readAloudSettings.contentSelector);
+            if (customElement) {
+                content = customElement.innerText || customElement.textContent || '';
+            }
+        }
+
+        // Strategy 2: Common content selectors for various themes and page builders
+        if (!content) {
+            const contentSelectors = [
+                // User's specific Avada structure - most specific first
+                '#contenido .fusion-text-5',
+                '#contenido .fusion-text-4',
+                '#contenido .fusion-text-3',
+                '#contenido .fusion-text-2',
+                '#contenido .fusion-text-1',
+                '#contenido .fusion-text',
+                '#contenido .fusion-builder-column',
+                '#contenido .fusion-column-wrapper',
+
+                // Deep Avada nested selectors - numbered fusion-text classes
+                '.fusion-text-5',
+                '.fusion-text-4',
+                '.fusion-text-3',
+                '.fusion-text-2',
+                '.fusion-text-1',
+                '.fusion-content-tb .fusion-text',
+                '.fusion-builder-row .fusion-text',
+                '.fusion-layout-column .fusion-text',
+                '.fusion-column-wrapper .fusion-text',
+                '.fusion-builder-column .fusion-text',
+
+                // Broader Avada selectors
+                '.fusion-text',
+                '.fusion-builder-column',
+                '.fusion-content-container',
+                '.fusion-column-wrapper',
+                '#main .post-content',
+                '.fusion-body .post-content',
+
+                // Elementor selectors
+                '.elementor-widget-text-editor',
+                '.elementor-text-editor',
+                '.elementor-element',
+
+                // Generic WordPress selectors
+                '.entry-content',
+                '.post-content',
+                '.page-content',
+                '#content .content',
+                'article .content',
+                '.single-post .content',
+                'main article',
+
+                // Custom ID selectors
+                '#contenido',
+
+                // Fallback selectors
+                '#main',
+                '#content',
+                'main'
+            ];
+
+            for (let selector of contentSelectors) {
+                const elements = document.querySelectorAll(selector);
+                if (elements.length > 0) {
+                    let extractedText = '';
+                    elements.forEach(element => {
+                        const text = element.innerText || element.textContent || '';
+                        // For Avada, be less restrictive - accept text with 20+ characters
+                        if (text.trim().length > 20) {
+                            extractedText += text.trim() + ' ';
+                        }
+                    });
+
+                    // Accept any substantial content found
+                    if (extractedText.trim().length > content.length && extractedText.trim().length > 100) {
+                        content = extractedText.trim();
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Strategy 3: Extract from the main content area
+        if (!content) {
+            const bodyText = document.body.innerText || document.body.textContent || '';
+            // Remove common header/footer elements
+            const cleanedText = bodyText
+                .replace(/Skip to content|Skip to main content/gi, '')
+                .replace(/Copyright.*$/gi, '')
+                .replace(/All rights reserved.*$/gi, '')
+                .trim();
+
+            if (cleanedText.length > 100) {
+                content = cleanedText;
+            }
+        }
+
+        // Clean up the extracted content
+        if (content) {
+            // Remove extra whitespace
+            content = content.replace(/\s+/g, ' ').trim();
+
+            // Remove navigation and menu text
+            content = content.replace(/Home|About|Contact|Menu|Search|Login|Register/gi, '');
+        }
+
+        return content;
+    }
 
     /**
      * Cleanup handler for page navigation.

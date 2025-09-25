@@ -77,11 +77,15 @@ class WP_Read_Tools_Ajax {
 	public static function handle_get_content_request() {
 		wp_read_tools_log( 'AJAX request received for content retrieval' );
 
-		// Check rate limiting first
+		// Check rate limiting first (but be more lenient for debugging)
 		if ( ! self::check_rate_limit() ) {
 			wp_read_tools_log( 'AJAX request blocked due to rate limiting', 'warning' );
+			// Send a more specific error for debugging
 			wp_send_json_error(
-				array( 'message' => __( 'Too many requests. Please try again later.', 'wp-read-tools' ) ),
+				array(
+					'message' => __( 'Too many requests. Please try again later.', 'wp-read-tools' ),
+					'debug' => 'rate_limit_exceeded'
+				),
 				429 // Too Many Requests
 			);
 			wp_die();
@@ -91,12 +95,18 @@ class WP_Read_Tools_Ajax {
 		// The nonce name 'read_aloud_nonce' should match the one created in WP_Read_Tools_Enqueue.
 		// The key 'nonce' should match the key sent in the AJAX data from read-aloud.js.
 		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_key( $_POST['nonce'] ), 'read_aloud_nonce' ) ) {
+			wp_read_tools_log( 'AJAX request failed nonce verification', 'error' );
 			wp_send_json_error(
-				array( 'message' => __( 'Security check failed.', 'wp-read-tools' ) ),
+				array(
+					'message' => __( 'Security check failed.', 'wp-read-tools' ),
+					'debug' => 'nonce_verification_failed'
+				),
 				403 // Forbidden
 			);
 			wp_die();
 		}
+
+		wp_read_tools_log( 'AJAX nonce verification passed' );
 
 		// Check if the post ID is provided.
 		if ( ! isset( $_POST['post_id'] ) ) {
@@ -136,13 +146,31 @@ class WP_Read_Tools_Ajax {
 			wp_die();
 		}
 
-		// Get the raw post content.
-		$content = get_post_field( 'post_content', $post_id );
+		// Get the raw post content using direct database extraction
+		$content = self::extract_all_content_from_database( $post_id );
+
+		wp_read_tools_log( "Retrieved content for post {$post_id}, length: " . strlen($content) );
 
 		if ( is_wp_error( $content ) ) {
+			wp_read_tools_log( 'Error retrieving post content: ' . $content->get_error_message(), 'error' );
 			wp_send_json_error(
-				array( 'message' => __( 'Error retrieving post content.', 'wp-read-tools' ) ),
+				array(
+					'message' => __( 'Error retrieving post content.', 'wp-read-tools' ),
+					'debug' => 'content_retrieval_failed'
+				),
 				500 // Internal Server Error
+			);
+			wp_die();
+		}
+
+		if ( empty( $content ) ) {
+			wp_read_tools_log( "Empty content retrieved for post {$post_id}", 'warning' );
+			wp_send_json_error(
+				array(
+					'message' => __( 'Post content is empty.', 'wp-read-tools' ),
+					'debug' => 'empty_content'
+				),
+				400 // Bad Request
 			);
 			wp_die();
 		}
@@ -286,8 +314,8 @@ class WP_Read_Tools_Ajax {
 			$request_count = 0;
 		}
 
-		// Rate limit settings (filterable)
-		$max_requests = apply_filters( 'wp_read_tools_rate_limit_max_requests', 30 ); // 30 requests
+		// Rate limit settings (filterable) - more lenient defaults
+		$max_requests = apply_filters( 'wp_read_tools_rate_limit_max_requests', 60 ); // 60 requests (doubled)
 		$time_window = apply_filters( 'wp_read_tools_rate_limit_time_window', 300 ); // 5 minutes
 
 		// Check if limit exceeded
@@ -300,6 +328,175 @@ class WP_Read_Tools_Ajax {
 		set_transient( $rate_limit_key, $request_count, $time_window );
 
 		return true;
+	}
+
+	/**
+	 * Enhanced content retrieval for page builders and custom content areas.
+	 *
+	 * IMPORTANT FOR PAGE BUILDER USERS (Avada, Elementor, etc.):
+	 * This plugin works best when content is included in WordPress's native post
+	 * content field. While the plugin can extract content from page builders,
+	 * including at least a summary in the main WordPress editor ensures optimal
+	 * reading time calculation and text-to-speech functionality.
+	 *
+	 * Uses multiple strategies to retrieve content for speech synthesis:
+	 * 1. Check if frontend extraction is needed (for page builders without backend content)
+	 * 2. Use custom content selector if specified via shortcode
+	 * 3. Extract from page builder meta fields (Avada, Elementor)
+	 * 4. Fallback to standard post content (always recommended to populate)
+	 *
+	 * Content Sources Priority:
+	 * - Native WordPress content field (best compatibility)
+	 * - Page builder meta fields (secondary extraction)
+	 * - Frontend content extraction (last resort)
+	 *
+	 * @since  1.0.1
+	 * @access private
+	 * @static
+	 *
+	 * @param  int $post_id Post ID to retrieve content for.
+	 * @return string       Post content for speech synthesis.
+	 */
+	private static function get_post_content_for_speech( $post_id ) {
+		// Check if this post needs frontend content extraction
+		$needs_frontend = get_post_meta( $post_id, '_wp_read_tools_needs_frontend_extraction', true );
+		$custom_selector = get_post_meta( $post_id, '_wp_read_tools_content_selector', true );
+
+		wp_read_tools_log( sprintf(
+			'Content extraction for post %d: needs_frontend=%s, custom_selector=%s',
+			$post_id,
+			$needs_frontend,
+			$custom_selector ?: 'none'
+		) );
+
+		if ( $needs_frontend === 'yes' || ! empty( $custom_selector ) ) {
+			// For page builders, we need to get the rendered content
+			// This requires a different approach - we'll get what we can from the backend
+			// and let the frontend JavaScript extract additional content if needed
+
+			$content = get_post_field( 'post_content', $post_id );
+
+			// Try to get more content from page builder meta
+			if ( empty( trim( $content ) ) || $needs_frontend === 'yes' ) {
+				$content = self::extract_page_builder_content( $post_id );
+			}
+
+			// If still empty, set a flag for frontend extraction
+			if ( empty( trim( strip_tags( $content ) ) ) ) {
+				wp_read_tools_log( "Post {$post_id} requires frontend content extraction", 'warning' );
+				// We'll return a special marker that the frontend can detect
+				$content = '<!-- WP_READ_TOOLS_FRONTEND_EXTRACTION_NEEDED -->' . $content;
+			}
+
+			return $content;
+		}
+
+		// Standard content retrieval
+		return get_post_field( 'post_content', $post_id );
+	}
+
+	/**
+	 * Extract content from page builder meta data.
+	 *
+	 * Attempts to retrieve content from various page builder meta fields
+	 * and combines them into readable text.
+	 *
+	 * @since  1.0.1
+	 * @access private
+	 * @static
+	 *
+	 * @param  int $post_id Post ID to extract content from.
+	 * @return string       Extracted content or empty string.
+	 */
+	private static function extract_page_builder_content( $post_id ) {
+		$content = '';
+
+		// Avada/Fusion Builder content extraction
+		if ( function_exists( 'avada_get_theme_option' ) || class_exists( 'FusionBuilder' ) ) {
+			// Try various Avada meta fields
+			$avada_fields = array(
+				'_avada_page_content',
+				'_fusion_builder_content',
+				'fusion_builder_content_backup',
+			);
+
+			foreach ( $avada_fields as $field ) {
+				$avada_content = get_post_meta( $post_id, $field, true );
+				if ( ! empty( $avada_content ) ) {
+					$content .= ' ' . $avada_content;
+				}
+			}
+		}
+
+		// Elementor content extraction
+		if ( defined( 'ELEMENTOR_VERSION' ) ) {
+			$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+			if ( ! empty( $elementor_data ) ) {
+				// Elementor data is JSON, extract text content
+				$elementor_content = self::extract_text_from_elementor_data( $elementor_data );
+				if ( ! empty( $elementor_content ) ) {
+					$content .= ' ' . $elementor_content;
+				}
+			}
+		}
+
+		// Clean up and return
+		$content = trim( $content );
+		if ( ! empty( $content ) ) {
+			wp_read_tools_log( "Extracted page builder content for post {$post_id}, length: " . strlen( $content ) );
+		}
+
+		return $content;
+	}
+
+	/**
+	 * Extract text content from Elementor JSON data.
+	 *
+	 * Recursively parses Elementor JSON data to extract readable text content.
+	 *
+	 * @since  1.0.1
+	 * @access private
+	 * @static
+	 *
+	 * @param  string $elementor_data JSON string containing Elementor data.
+	 * @return string                 Extracted text content.
+	 */
+	private static function extract_text_from_elementor_data( $elementor_data ) {
+		$text_content = '';
+
+		if ( is_string( $elementor_data ) ) {
+			$data = json_decode( $elementor_data, true );
+		} else {
+			$data = $elementor_data;
+		}
+
+		if ( ! is_array( $data ) ) {
+			return '';
+		}
+
+		foreach ( $data as $element ) {
+			if ( is_array( $element ) ) {
+				// Check for text content in settings
+				if ( isset( $element['settings'] ) ) {
+					$settings = $element['settings'];
+
+					// Common text fields in Elementor
+					$text_fields = array( 'text', 'content', 'title', 'description', 'html' );
+					foreach ( $text_fields as $field ) {
+						if ( isset( $settings[ $field ] ) && ! empty( $settings[ $field ] ) ) {
+							$text_content .= ' ' . $settings[ $field ];
+						}
+					}
+				}
+
+				// Recursively check elements array
+				if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+					$text_content .= ' ' . self::extract_text_from_elementor_data( $element['elements'] );
+				}
+			}
+		}
+
+		return trim( $text_content );
 	}
 
 	/**
@@ -341,5 +538,126 @@ class WP_Read_Tools_Ajax {
 		}
 
 		return '';
+	}
+
+	/**
+	 * Extract all possible content directly from the database.
+	 *
+	 * This method queries the database directly to find all content associated
+	 * with a post, including meta fields from page builders like Avada/Elementor.
+	 *
+	 * @since  1.0.1
+	 * @access private
+	 * @static
+	 *
+	 * @param  int $post_id Post ID to extract content for.
+	 * @return string       Combined content from all sources.
+	 */
+	private static function extract_all_content_from_database( $post_id ) {
+		global $wpdb;
+
+		wp_read_tools_log( "Starting direct database content extraction for post {$post_id}" );
+
+		$all_content = '';
+
+		// 1. Get the standard post content
+		$post_content = get_post_field( 'post_content', $post_id );
+		if ( ! empty( trim( $post_content ) ) ) {
+			$all_content .= $post_content . ' ';
+			wp_read_tools_log( "Found standard post content, length: " . strlen( $post_content ) );
+		}
+
+		// 2. Get ALL meta values for this post that might contain content
+		$meta_query = $wpdb->prepare(
+			"SELECT meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND (
+				meta_key LIKE %s OR
+				meta_key LIKE %s OR
+				meta_key LIKE %s OR
+				meta_key LIKE %s OR
+				meta_key LIKE %s OR
+				meta_key LIKE %s OR
+				meta_key LIKE %s OR
+				meta_key LIKE %s
+			) AND CHAR_LENGTH(meta_value) > %d",
+			$post_id,
+			'%content%',
+			'%text%',
+			'%description%',
+			'%body%',
+			'%fusion%',
+			'%elementor%',
+			'%avada%',
+			'%builder%',
+			50
+		);
+
+		$meta_results = $wpdb->get_results( $meta_query );
+
+		if ( $meta_results ) {
+			wp_read_tools_log( "Found " . count( $meta_results ) . " meta fields with potential content" );
+
+			foreach ( $meta_results as $meta ) {
+				$meta_content = $meta->meta_value;
+
+				// Skip serialized data that's too complex, but try to extract strings
+				if ( is_serialized( $meta_content ) ) {
+					$unserialized = maybe_unserialize( $meta_content );
+					if ( is_string( $unserialized ) && strlen( $unserialized ) > 50 ) {
+						$all_content .= ' ' . $unserialized;
+						wp_read_tools_log( "Added content from meta '{$meta->meta_key}' (unserialized), length: " . strlen( $unserialized ) );
+					} elseif ( is_array( $unserialized ) ) {
+						// Try to extract text from array elements
+						$array_text = self::extract_text_from_array( $unserialized );
+						if ( ! empty( $array_text ) ) {
+							$all_content .= ' ' . $array_text;
+							wp_read_tools_log( "Added content from meta '{$meta->meta_key}' (array extraction), length: " . strlen( $array_text ) );
+						}
+					}
+				} elseif ( is_string( $meta_content ) && strlen( $meta_content ) > 50 ) {
+					$all_content .= ' ' . $meta_content;
+					wp_read_tools_log( "Added content from meta '{$meta->meta_key}', length: " . strlen( $meta_content ) );
+				}
+			}
+		}
+
+		// Clean up the combined content
+		$all_content = trim( $all_content );
+
+		wp_read_tools_log( "Total combined content length: " . strlen( $all_content ) );
+
+		// Return what we found, even if minimal
+		return $all_content;
+	}
+
+	/**
+	 * Extract text content from nested arrays recursively.
+	 *
+	 * Used to extract readable content from complex data structures
+	 * that page builders often store in meta fields.
+	 *
+	 * @since  1.0.1
+	 * @access private
+	 * @static
+	 *
+	 * @param  mixed $data Array or other data structure to extract text from.
+	 * @return string      Extracted text content.
+	 */
+	private static function extract_text_from_array( $data ) {
+		$text = '';
+
+		if ( is_array( $data ) ) {
+			foreach ( $data as $key => $value ) {
+				if ( is_string( $value ) && strlen( $value ) > 20 && ! is_serialized( $value ) ) {
+					// Only include values that look like readable text
+					if ( preg_match( '/[a-zA-Z\s]{20,}/', $value ) ) {
+						$text .= ' ' . $value;
+					}
+				} elseif ( is_array( $value ) ) {
+					$text .= ' ' . self::extract_text_from_array( $value );
+				}
+			}
+		}
+
+		return trim( $text );
 	}
 }

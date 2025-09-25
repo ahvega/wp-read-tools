@@ -205,6 +205,62 @@ cp languages/wp-read-tools.pot languages/wp-read-tools-fr_FR.po
 # 4. Upload to languages directory
 ```
 
+## ⚠️ Important Notes for Theme Builders
+
+**Content Requirement for Page Builders (Avada, Elementor, etc.)**
+
+For optimal functionality with theme builders like Avada, Elementor, or similar page builders:
+
+### Content Detection Strategy
+
+1. **Native WordPress Content Field**: The plugin works best when your post content is included in WordPress's native post content field (`post_content`), not exclusively in page builder modules/widgets.
+
+2. **Multi-Level Content Detection**: The plugin uses intelligent content extraction:
+   - **Primary**: Standard WordPress content field
+   - **Secondary**: Page builder meta fields (Avada, Elementor)
+   - **Fallback**: Frontend content extraction when needed
+
+3. **Page Builder Support**:
+   - **Avada/Fusion Builder**: Extracts from `_avada_page_content`, `_fusion_builder_content`, and other meta fields
+   - **Elementor**: Parses JSON data from `_elementor_data` meta field
+   - **Generic**: Searches all meta fields containing content-related keywords
+
+### Best Practices for Page Builder Users
+
+#### For Avada Users
+```php
+// The plugin automatically detects Avada and extracts content from:
+// - Native post content field (recommended to include at least a summary)
+// - Avada page builder meta fields
+// - Frontend content extraction as fallback
+```
+
+#### For Elementor Users
+```php
+// Elementor content is automatically extracted from JSON data
+// Include important text in native content field for best results
+```
+
+#### General Recommendations
+- **Include Summary**: Always add a summary or key content in the native WordPress editor
+- **Mixed Content**: Combine native content with page builder elements for best compatibility
+- **Testing**: Use the shortcode to test reading time and text-to-speech functionality
+- **Fallback**: The plugin gracefully degrades if page builder content cannot be extracted
+
+### Troubleshooting Content Issues
+
+If reading time seems inaccurate or text-to-speech doesn't work properly:
+
+1. **Check Content Field**: Ensure some content exists in the native WordPress post editor
+2. **Custom Selector**: Use the `content_id` parameter to specify a custom content container:
+   ```php
+   [readtime read-aloud="yes" content_id="main-content"]
+   ```
+3. **Debug Mode**: Enable debug logging to see content extraction details:
+   ```php
+   define('WP_READ_TOOLS_DEBUG', true);
+   ```
+
 ## 👨‍💻 Developer Documentation
 
 ### Architecture Overview
