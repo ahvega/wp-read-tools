@@ -55,3 +55,5 @@ phpunit.xml
 .phpunit.result.cache
 phpcs.xml
 .phpcs.cache
+.claude/
+.claude/**/*

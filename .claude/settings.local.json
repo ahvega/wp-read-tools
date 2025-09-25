@@ -6,7 +6,9 @@
       "Bash(c:/wp-cli/wp --version)",
       "Bash(\"c:\\wp-cli\\wp.bat\" i18n make-pot . languages/wp-read-tools.pot --domain=wp-read-tools)",
       "Bash(\"c:\\wp-cli\\wp.bat\" i18n make-mo languages/)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
