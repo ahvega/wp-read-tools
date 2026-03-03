@@ -25,15 +25,16 @@ The plugin follows WordPress coding standards with a modular class-based archite
 ## Key Features Implementation
 
 ### Reading Time Calculation
-- Uses `str_word_count()` on stripped content (no HTML/shortcodes)
+- Uses `str_word_count()` on stripped content
+- Shortcode tags stripped via regex (`preg_replace`) to preserve inner content (critical for page builders like Avada/Fusion Builder)
 - Default 180 WPM, customizable via shortcode attribute
 - Rounds to nearest 0.5 minutes for display
 - Supports localized number formatting (special handling for Spanish locales)
 
 ### Text-to-Speech
 - Browser-based Speech Synthesis API
-- AJAX fetches cleaned post content via `wp_read_tools_get_content` action
-- Automatic voice selection (prefers female voices, falls back to language-appropriate voices)
+- AJAX fetches post content via `get_post_field('post_content')` (standard WP field, not database meta extraction)
+- Smart voice selection: Spanish prioritizes es-US Neural → LatAm Neural → any es-*; other languages prefer Neural/Natural voices
 - Global state management for pause/resume across multiple instances
 - Proper cleanup on navigation/cancellation
 
@@ -62,7 +63,7 @@ Standard WordPress plugin installation:
 - AJAX requests use WordPress nonces for security
 - Post IDs are validated and sanitized
 - Only published posts are accessible via AJAX
-- Content is stripped of HTML/shortcodes before speech synthesis
+- Content shortcode tags stripped via regex (preserves inner text); HTML stripped before speech synthesis
 
 ## Internationalization
 

@@ -220,9 +220,17 @@ class WP_Read_Tools_Shortcode {
 		// Get the post content using enhanced detection for page builders
 		$content = self::get_post_content_enhanced( $post_id, $content_id );
 
-		// Remove shortcodes and HTML tags to get a clean word count.
-		$stripped_content = strip_shortcodes( $content );
+		// Remove shortcode tags but preserve inner content (critical for page builders
+		// like Avada/Fusion Builder whose registered shortcodes would be removed entirely
+		// by strip_shortcodes(), including the text content within them).
+		$stripped_content = preg_replace( '/\[\/?\w[^\]]*\]/', '', $content );
 		$stripped_content = wp_strip_all_tags( $stripped_content );
+
+		// Fix drop-cap artifact: when a drop-cap shortcode wraps a single letter,
+		// stripping tags leaves a space between the letter and the rest of the word
+		// (e.g. [fusion_dropcap]O[/fusion_dropcap] rando → "O rando" instead of "Orando").
+		$stripped_content = trim( $stripped_content );
+		$stripped_content = preg_replace( '/^(\pL)\s+(\pL)/u', '$1$2', $stripped_content );
 
 		// Allow filtering of content before word count calculation
 		$stripped_content = apply_filters( 'wp_read_tools_content_before_count', $stripped_content, $post_id );

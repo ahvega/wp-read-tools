@@ -258,18 +258,37 @@ jQuery(document).ready(function($) {
      */
     function findAndSetVoice(utterance, langCode) {
         const voices = window.speechSynthesis.getVoices();
+        const langMatch = v => v.lang === 'es-US' || v.lang.replace('_', '-') === 'es-US';
+        const latamCodes = ['es-US', 'es-MX', 'es-CO', 'es-CR', 'es-GT', 'es-HN', 'es-NI', 'es-PA', 'es-SV', 'es-DO', 'es-AR', 'es-CL', 'es-PE', 'es-419'];
+        const isLatam = v => latamCodes.some(c => v.lang === c || v.lang.replace('_', '-') === c);
 
-        // Prefer female voices for better user experience
-        let femaleVoice = voices.find(v =>
-            v.lang.startsWith(langCode) &&
-            (v.name.includes('Female') || v.gender === 'female')
-        );
+        let selectedVoice = null;
 
-        // Fallback to any voice in the target language
-        let anyVoice = voices.find(v => v.lang.startsWith(langCode));
+        if (langCode === 'es') {
+            // 1st: es-US Neural/Natural — bilingual, handles English terms in Spanish docs
+            selectedVoice = voices.find(v => langMatch(v) && /online|natural/i.test(v.name));
 
-        // Fallback chain: female voice -> language match -> default -> first available
-        utterance.voice = femaleVoice || anyVoice || voices.find(v => v.default) || voices[0];
+            // 2nd: Any es-US voice
+            if (!selectedVoice) selectedVoice = voices.find(v => langMatch(v));
+
+            // 3rd: Neural + Latin American Spanish (es-MX, es-CR, etc.)
+            if (!selectedVoice) selectedVoice = voices.find(v => isLatam(v) && /online|natural/i.test(v.name));
+
+            // 4th: Any Latin American Spanish voice
+            if (!selectedVoice) selectedVoice = voices.find(v => isLatam(v));
+
+            // 5th: Any es-* voice (including es-ES) as fallback
+            if (!selectedVoice) selectedVoice = voices.find(v => /^es[-_]/i.test(v.lang) || v.lang === 'es');
+        } else {
+            // For non-Spanish languages, prefer Neural/Natural voices
+            selectedVoice = voices.find(v => v.lang.startsWith(langCode) && /online|natural/i.test(v.name));
+            if (!selectedVoice) selectedVoice = voices.find(v => v.lang.startsWith(langCode));
+        }
+
+        // Final fallback: default voice or first available
+        utterance.voice = selectedVoice || voices.find(v => v.default) || voices[0];
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
     }
 
     /**

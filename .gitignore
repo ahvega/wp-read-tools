@@ -1,59 +1,82 @@
-# IDE & Editor Files
+# === IDE & Editor Files ===
 .vscode/
 .idea/
 *.sublime-project
 *.sublime-workspace
+
+# === OS Files ===
 .DS_Store
 Thumbs.db
+Desktop.ini
 
-# Node/NPM (if using build tools in the future)
+# === Agentic / AI Folders & Files ===
+.claude/
+.cursor/
+.windsurf/
+.references/
+.copilot/
+.aider*
+.gdoc-sync/
+
+# === Documentation (keep only README.md) ===
+BUGFIX_*.md
+OPTIMIZATION*.md
+TRANSLATION_*.md
+TROUBLESHOOTING.md
+CONVERSIONS.md
+LIFECYCLE*.md
+WORKFLOW.md
+findings.md
+progress.md
+task_plan.md
+
+# === Node / NPM ===
 node_modules/
 npm-debug.log
 yarn-debug.log
 yarn-error.log
+package-lock.json
 
-# Composer (if using PHP dependencies)
+# === Composer / PHP ===
 /vendor/
 composer.lock
 
-# Build/Distribution Files
+# === Build / Distribution ===
 /dist/
 /build/
 *.zip
+*.tar.gz
 
-# Environment & Configuration
+# === Environment & Configuration ===
 .env
+.env.*
 sftp.json
 *.conf
 .ftpconfig
 .sftp-config.json
+settings.local.json
 
-# Cache & Temporary Files
+# === Cache & Temporary Files ===
 *.log
 *.tmp
 *.temp
 .sass-cache/
 .cache/
 
-# Testing
+# === Testing ===
 /tests/coverage/
 phpunit.xml
+.phpunit.result.cache
 
-# WordPress Plugin Specific
-.references/
-
-# Backup Files
+# === Backup Files ===
 *.bak
 *.swp
 *~
 *.old
 *.orig
 
-# Development Tools
+# === PHP Linting ===
 .phpcs.xml
 .phplint-cache
-.phpunit.result.cache
-phpcs.xml
 .phpcs.cache
-.claude/
-.claude/**/*
+phpcs.xml

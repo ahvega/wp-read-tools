@@ -146,8 +146,9 @@ class WP_Read_Tools_Ajax {
 			wp_die();
 		}
 
-		// Get the raw post content using direct database extraction
-		$content = self::extract_all_content_from_database( $post_id );
+		// Get the post content - use standard post_content field which contains
+		// the actual article text (including page builder shortcodes with content)
+		$content = get_post_field( 'post_content', $post_id );
 
 		wp_read_tools_log( "Retrieved content for post {$post_id}, length: " . strlen($content) );
 
@@ -205,9 +206,17 @@ class WP_Read_Tools_Ajax {
 	 * @return string          Processed content ready for speech synthesis.
 	 */
 	private static function process_content_for_speech( $content, $post_id ) {
-		// Remove shortcodes and HTML tags
-		$stripped_content = strip_shortcodes( $content );
+		// Remove shortcode tags but preserve inner content (critical for page builders
+		// like Avada/Fusion Builder whose registered shortcodes would be removed entirely
+		// by strip_shortcodes(), including the text content within them).
+		$stripped_content = preg_replace( '/\[\/?\w[^\]]*\]/', '', $content );
 		$stripped_content = wp_strip_all_tags( $stripped_content );
+
+		// Fix drop-cap artifact: when a drop-cap shortcode wraps a single letter,
+		// stripping tags leaves a space between the letter and the rest of the word
+		// (e.g. [fusion_dropcap]O[/fusion_dropcap] rando → "O rando" instead of "Orando").
+		$stripped_content = trim( $stripped_content );
+		$stripped_content = preg_replace( '/^(\pL)\s+(\pL)/u', '$1$2', $stripped_content );
 
 		// Decode HTML entities that might remain after stripping tags
 		$stripped_content = html_entity_decode( $stripped_content );
