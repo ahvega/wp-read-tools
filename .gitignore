@@ -72,6 +72,15 @@ id_rsa.*
 id_ed25519
 id_ed25519.*
 
+# === Private / Sensitive Documents ===
+# docs/private/ is the primary mechanism: anything dropped there stays local
+# without further .gitignore edits. The name patterns below are a root-level
+# safety net and are .md-suffixed so they can never catch source files.
+docs/private/
+SECURITY_AUDIT*.md
+PENTEST*.md
+*_CREDENTIALS*.md
+
 # === Database Dumps & Data Exports ===
 *.sql
 *.sql.gz

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git blame:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(git ls-files:*)",
+      "Bash(wp i18n make-pot:*)",
+      "Bash(wp i18n make-mo:*)",
+      "Bash(wp --version)",
+      "Bash(php -l:*)",
+      "WebFetch(domain:developer.wordpress.org)",
+      "WebFetch(domain:codex.wordpress.org)",
+      "WebFetch(domain:developer.mozilla.org)",
+      "WebFetch(domain:www.php.net)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/.env)",
+      "Read(./**/.env.*)",
+      "Read(./.vscode/sftp.json)",
+      "Read(./**/sftp.json)",
+      "Read(./.ftpconfig)",
+      "Read(./.sftp-config.json)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)",
+      "Read(./**/*.p12)",
+      "Read(./**/id_rsa*)",
+      "Read(./**/wp-config.php)",
+      "Bash(wp config get:*)",
+      "Bash(wp config list:*)",
+      "Bash(wp db export:*)",
+      "Bash(wp db dump:*)",
+      "Bash(wp db cli:*)",
+      "Bash(wp db drop:*)",
+      "Bash(wp db reset:*)",
+      "Bash(wp eval:*)",
+      "Bash(wp eval-file:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git filter-repo:*)",
+      "Bash(rm -rf:*)",
+      "Bash(wp db:*)",
+      "Bash(wp plugin deactivate:*)",
+      "Bash(wp plugin delete:*)",
+      "Bash(wp post delete:*)",
+      "Bash(wp user:*)",
+      "Bash(gh repo edit:*)",
+      "Bash(gh release:*)"
+    ]
+  }
+}
