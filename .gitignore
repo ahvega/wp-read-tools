@@ -10,7 +10,10 @@ Thumbs.db
 Desktop.ini
 
 # === Agentic / AI Folders & Files ===
-.claude/
+# Use `.claude/*` (not `.claude/`) so shared config can be re-included below;
+# an excluded parent directory makes any child negation inert.
+.claude/*
+!.claude/settings.json
 .cursor/
 .windsurf/
 .references/
@@ -18,28 +21,24 @@ Desktop.ini
 .aider*
 .gdoc-sync/
 
-# === Documentation (keep only README.md) ===
-BUGFIX_*.md
-OPTIMIZATION*.md
-TRANSLATION_*.md
-TROUBLESHOOTING.md
-CONVERSIONS.md
-LIFECYCLE*.md
-WORKFLOW.md
+# === Documentation ===
+# Project docs (BUGFIX_*, OPTIMIZATION*, TRANSLATION_*, TROUBLESHOOTING) are
+# intentionally TRACKED: they carry context for contributors, CI, and code review.
+# Only ephemeral scratch planning files are ignored here.
 findings.md
 progress.md
 task_plan.md
 
 # === Node / NPM ===
+# Lockfiles are deliberately NOT ignored: they pin the exact dependency tree
+# and belong in version control for reproducible installs.
 node_modules/
 npm-debug.log
 yarn-debug.log
 yarn-error.log
-package-lock.json
 
 # === Composer / PHP ===
 /vendor/
-composer.lock
 
 # === Build / Distribution ===
 /dist/
@@ -50,14 +49,45 @@ composer.lock
 # === Environment & Configuration ===
 .env
 .env.*
+!.env.example
 sftp.json
-*.conf
+*.local.conf
 .ftpconfig
 .sftp-config.json
 settings.local.json
+wp-config.php
+
+# === Credentials, Keys & Certificates ===
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.keystore
+*.jks
+*.ppk
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+
+# === Database Dumps & Data Exports ===
+*.sql
+*.sql.gz
+*.dump
+*.sqlite
+*.sqlite3
+*.db
+*.mdb
+*.csv
+*.xls
+*.xlsx
 
 # === Cache & Temporary Files ===
 *.log
+error_log
+debug.log
 *.tmp
 *.temp
 .sass-cache/
