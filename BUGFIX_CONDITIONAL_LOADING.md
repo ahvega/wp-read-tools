@@ -3,7 +3,7 @@
 ## 🐛 Issue Identified
 After implementing conditional asset loading optimization, the text-to-speech "Escuchar" link stopped working on the live site.
 
-**Site affected:** https://consultoria-aplicada.com/https-consultoria-aplicada-com-modalidad-hibrida/
+**Site affected:** a client production site (Avada/Fusion Builder theme, Spanish locale)
 
 ## 🔍 Root Cause Analysis
 The conditional asset loading logic was too restrictive and failed to load JavaScript/CSS assets because:
@@ -110,4 +110,4 @@ if (is_singular()) {
 - Performance optimization maintained where safe
 - Future-proof solution implemented
 
-**Site Status:** https://consultoria-aplicada.com/ - Text-to-speech working perfectly!
+**Site Status:** verified on the affected client site - text-to-speech working correctly.
