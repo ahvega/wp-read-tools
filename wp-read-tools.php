@@ -106,6 +106,105 @@ add_action( 'plugins_loaded', 'wp_read_tools_load_textdomain' );
  * @param string $level   Log level (info, warning, error). Default 'info'.
  * @return void
  */
+/**
+ * Strips markup and shortcodes from post content, producing plain readable text.
+ *
+ * Shared by the reading-time count and the text-to-speech path. These two used
+ * byte-identical copies of this pipeline, which is why every defect in it
+ * existed twice and had to be fixed twice.
+ *
+ * Shortcode tags are removed while their inner text is PRESERVED. This is
+ * deliberate and load-bearing for page builders: strip_shortcodes() deletes the
+ * entire registered shortcode including its body, which is where Avada/Fusion
+ * Builder keeps the article copy.
+ *
+ * @since 1.2.0
+ *
+ * @param  string $content Raw post content.
+ * @return string          Plain text, whitespace-normalized.
+ */
+function wp_read_tools_clean_content( $content ) {
+	if ( ! is_string( $content ) ) {
+		return '';
+	}
+
+	// Decode entities BEFORE stripping tags. Doing it after would resurrect
+	// "&lt;script&gt;" into real angle brackets in the output. ENT_QUOTES is
+	// explicit because the PHP 7.2-8.0 default (ENT_COMPAT) leaves &#039;
+	// undecoded, which the speech engine reads aloud character by character.
+	$text = html_entity_decode( $content, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+
+	// Resolve drop-cap shortcodes first, by name rather than by position. The
+	// previous heuristic anchored on the start of the document with
+	// '/^(\pL)\s+(\pL)/u', which both over- and under-triggered: it joined the
+	// first two words of any text opening with a one-letter word -- "A mi me
+	// gusta" became "Ami me gusta", and likewise for Y, O, E and English "I" --
+	// while fixing only the FIRST drop-cap in a document that had several.
+	$text = preg_replace( '/\[(fusion_)?dropcap[^\]]*\](.*?)\[\/(fusion_)?dropcap\]\s*/isu', '$2', $text );
+
+	// Remove remaining shortcode tags, keeping inner text.
+	//
+	// Requiring a letter as the first character means numeric citation markers
+	// -- [1], [15] -- now survive into both the word count and the spoken text;
+	// the previous '/\[\/?\w[^\]]*\]/' deleted them, since \w matches digits.
+	// The pattern also tolerates the [[escaped]] form WordPress uses to display
+	// a shortcode literally.
+	//
+	// Known limitation: an alphabetic editorial bracket such as [sic] is
+	// indistinguishable from a shortcode by pattern alone and is still removed.
+	// Matching against the registered $shortcode_tags table would fix that, at
+	// the cost of leaking raw tags whenever the registering plugin is inactive
+	// -- exactly the page-builder case this function exists to handle.
+	$text = preg_replace( '/\[\[?\/?[a-z][a-z0-9_-]*(?:\s[^\]]*)?\]?\]/iu', '', $text );
+
+	$text = wp_strip_all_tags( $text );
+
+	// Normalize whitespace. The /u modifier plus an explicit non-breaking space
+	// matters: &nbsp; (U+00A0) is pervasive in page-builder output and is not
+	// matched by \s without it.
+	$text = preg_replace( '/[\s\x{00A0}]+/u', ' ', $text );
+
+	// preg_replace() returns null on malformed UTF-8 (common with content
+	// imported from latin1 installs). Fall back rather than propagate null.
+	if ( null === $text ) {
+		$text = wp_strip_all_tags( (string) $content );
+	}
+
+	return trim( $text );
+}
+
+/**
+ * Counts words in a UTF-8 string.
+ *
+ * str_word_count() is byte-oriented and treats only [A-Za-z'-] as word
+ * characters, so it SPLITS every accented word in two: "canción" counts as
+ * "canci" + "n". Spanish is this plugin's documented primary locale and carries
+ * an accent or ñ on roughly 10-15% of words, so reading times were inflated by
+ * about that margin -- and the same applies to French, Portuguese and German.
+ * Digits were never counted at all.
+ *
+ * @since 1.2.0
+ *
+ * @param  string $text Plain text to count.
+ * @return int          Word count.
+ */
+function wp_read_tools_count_words( $text ) {
+	if ( ! is_string( $text ) || '' === trim( $text ) ) {
+		return 0;
+	}
+
+	// Letters and digits, allowing internal apostrophes and hyphens so that
+	// "don't" and "well-known" each count once.
+	$count = preg_match_all( '/[\p{L}\p{N}]+(?:[\'’\-][\p{L}\p{N}]+)*/u', $text );
+
+	// preg_match_all() returns false on malformed UTF-8.
+	if ( false === $count ) {
+		return str_word_count( $text );
+	}
+
+	return $count;
+}
+
 function wp_read_tools_log( $message, $level = 'info' ) {
 	if ( ! WP_READ_TOOLS_DEBUG || ! defined( 'WP_DEBUG_LOG' ) || ! WP_DEBUG_LOG ) {
 		return;
