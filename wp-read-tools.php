@@ -11,7 +11,7 @@
  * Plugin Name:       WP Read Tools
  * Plugin URI:        https://github.com/ahvega/wp-read-tools
  * Description:       Provides reading time estimation and text-to-speech functionality for WordPress posts via a shortcode. Enhances accessibility and user experience with browser-based speech synthesis.
- * Version:           1.1.1
+ * Version:           1.2.0
  * Requires at least: 5.0
  * Requires PHP:      7.2
  * Author:            Adalberto H. Vega
@@ -47,7 +47,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Start at version 1.0.0 and use SemVer - https://semver.org
  * Rename this for your plugin and update it as you release new versions.
  */
-define( 'WP_READ_TOOLS_VERSION', '1.1.1' );
+define( 'WP_READ_TOOLS_VERSION', '1.2.0' );
 
 /**
  * Debug mode flag.
@@ -94,18 +94,6 @@ function wp_read_tools_load_textdomain() {
 }
 add_action( 'plugins_loaded', 'wp_read_tools_load_textdomain' );
 
-/**
- * Debug logging helper function.
- *
- * Logs debug messages when WP_READ_TOOLS_DEBUG is enabled.
- * Messages are logged to WordPress debug log if WP_DEBUG_LOG is enabled.
- *
- * @since 1.0.0
- *
- * @param string $message Debug message to log.
- * @param string $level   Log level (info, warning, error). Default 'info'.
- * @return void
- */
 /**
  * Strips markup and shortcodes from post content, producing plain readable text.
  *
@@ -205,6 +193,18 @@ function wp_read_tools_count_words( $text ) {
 	return $count;
 }
 
+/**
+ * Debug logging helper function.
+ *
+ * Logs debug messages when WP_READ_TOOLS_DEBUG is enabled.
+ * Messages are logged to WordPress debug log if WP_DEBUG_LOG is enabled.
+ *
+ * @since 1.0.0
+ *
+ * @param string $message Debug message to log.
+ * @param string $level   Log level (info, warning, error). Default 'info'.
+ * @return void
+ */
 function wp_read_tools_log( $message, $level = 'info' ) {
 	if ( ! WP_READ_TOOLS_DEBUG || ! defined( 'WP_DEBUG_LOG' ) || ! WP_DEBUG_LOG ) {
 		return;

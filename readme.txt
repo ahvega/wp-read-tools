@@ -4,7 +4,7 @@ Donate link: https://github.com/sponsors/ahvega
 Tags: reading time, text-to-speech, accessibility, content, posts, shortcode, audio, speech synthesis, reading, wpm
 Requires at least: 5.0
 Tested up to: 6.4
-Stable tag: 1.1.1
+Stable tag: 1.2.0
 Requires PHP: 7.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -197,6 +197,49 @@ Security is a top priority:
 
 == Changelog ==
 
+= 1.2.0 - 2026-07-21 =
+**🐛 Correctness & Performance Release**
+
+* **Fixed**: Font Awesome never loaded on a stock install, so the plugin's
+  stopwatch and headphones icons rendered as nothing unless the theme happened
+  to ship Font Awesome. The "is it already present?" check included
+  `dashicons`, which WordPress core registers unconditionally, so the check
+  always matched and the icon stylesheet was never enqueued. Font Awesome 6
+  class names are now recognised too.
+* **Fixed**: Reading times were inflated by roughly 10-15% in Spanish, French,
+  Portuguese and German. Word counting used `str_word_count()`, which is
+  byte-oriented and split every accented word in two ("canción" counted as two
+  words). Numbers were not counted at all.
+* **Fixed**: Posts beginning with a one-letter word were corrupted. The
+  drop-cap repair joined the first two words of any such text, so "A mi me
+  gusta" was spoken and counted as "Ami me gusta" — affecting A, Y, O and E in
+  Spanish and "I" in English. Drop-caps are now matched by name, which also
+  repairs every occurrence rather than only the first.
+* **Fixed**: Citation markers such as [1] and [15] were deleted from both the
+  spoken text and the word count of any article carrying references.
+* **Fixed**: Apostrophes stored as `&#039;` were read aloud character by
+  character instead of being pronounced.
+* **Fixed**: `&nbsp;` (common in page-builder output) was not normalized and
+  leaked into the spoken text.
+* **Fixed**: Content imported from older latin1 installs could silently produce
+  empty speech and "0.0 min read".
+* **Fixed**: With two `[readtime read-aloud="yes"]` instances on one page,
+  pausing one and clicking the other resumed the first while leaving the second
+  stuck showing "Pause" indefinitely, unrecoverable without a page reload.
+* **Fixed**: In Chrome, articles could be queued and spoken two or three times
+  because the voice-loading handler fired repeatedly and was never detached.
+* **Fixed**: Conditional asset loading was a no-op on every post and page — CSS,
+  JS and jQuery loaded whether or not the shortcode appeared. Use the
+  `wp_read_tools_force_load_assets` filter for theme-injected shortcodes.
+* **Fixed**: A database write occurred on every uncached page view, from every
+  anonymous visitor, during shortcode rendering.
+* **Fixed**: Read-aloud links added to the page after load (infinite scroll,
+  AJAX archives, page-builder popups) had no click handler.
+* **Removed**: 412 lines of unreachable page-builder extraction code. It never
+  ran; what actually supports Avada is preserved and unchanged.
+* **Changed**: A very short post now reads "0.5 min read" instead of
+  "0.0 min read".
+
 = 1.1.1 - 2026-07-21 =
 **🔒 Security Release — update recommended for all sites**
 
@@ -283,6 +326,9 @@ unauthenticated content disclosure and hardens the surrounding checks.
     * Mobile device compatibility (iOS Safari 7+, Chrome Mobile 33+)
 
 == Upgrade Notice ==
+
+= 1.2.0 =
+🐛 **FIXES**: Plugin icons now actually render (they never loaded on a stock install). Reading times were overstated by 10-15% in Spanish and other accented languages and are now correct. Fixes text corruption in posts starting with a one-letter word, stuck playback when a page has two read-aloud links, and a database write on every page view. Note: assets now load only on pages containing the shortcode — themes that inject `[readtime]` from a template file should use the `wp_read_tools_force_load_assets` filter.
 
 = 1.1.1 =
 🔒 **SECURITY**: Fixes an unauthenticated content disclosure — password-protected posts could be read without the password via the public AJAX endpoint. Also hardens rate limiting against spoofed proxy headers, which previously allowed both bypass and locking other visitors out. Update recommended for all sites. Note: sites reading aloud a custom post type behind a `publicly_queryable => false` registration will need the new `wp_read_tools_allowed_post_types` filter.
