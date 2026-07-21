@@ -149,17 +149,21 @@ class WP_Read_Tools_Enqueue {
 	private static function should_load_assets() {
 		global $post, $wp_query;
 
-		// Always load in admin or when customizing
-		if ( is_admin() || is_customize_preview() ) {
+		// Note: no is_admin() branch. This method only runs from
+		// wp_enqueue_scripts, which never fires in the admin
+		// (admin_enqueue_scripts does), so such a branch is unreachable.
+		if ( is_customize_preview() ) {
 			return true;
 		}
 
-		// Allow force loading via filter (for theme integration)
+		// Allow force loading via filter (for theme integration).
+		// Themes that inject [readtime] from a template file rather than post
+		// content should use this - it is why the unconditional fallthrough
+		// below used to exist.
 		if ( apply_filters( 'wp_read_tools_force_load_assets', false ) ) {
 			return true;
 		}
 
-		// For now, be more permissive to avoid breaking functionality
 		// Load on singular pages (posts, pages, custom post types)
 		if ( is_singular() ) {
 			// Check current post content if available
@@ -177,9 +181,11 @@ class WP_Read_Tools_Enqueue {
 				}
 			}
 
-			// For singular pages, load assets to be safe (theme might add shortcode)
-			// This maintains functionality while still optimizing for non-singular pages
-			return true;
+			// Previously this returned true unconditionally, which made the
+			// whole "conditional loading" optimization a no-op on every
+			// singular page - the CSS, JS, jQuery and the Font Awesome CDN
+			// stylesheet loaded whether or not [readtime] appeared anywhere.
+			return false;
 		}
 
 		// Check for shortcode in queried posts (for archive pages, search results, etc.)
@@ -219,19 +225,32 @@ class WP_Read_Tools_Enqueue {
 			return;
 		}
 
-		// Check if Font Awesome is already enqueued by theme or other plugins
+		// Check if Font Awesome is already enqueued by theme or other plugins.
+		//
+		// Two bugs previously made this method return early on EVERY request, so
+		// the CDN enqueue below was unreachable and the plugin's icons never
+		// rendered on a stock install:
+		//
+		// 1. 'dashicons' was in the list. Core registers dashicons
+		//    unconditionally in wp_default_styles(), and wp_style_is() lazily
+		//    instantiates WP_Styles (which fires that registration), so the
+		//    'registered' test was always true. Dashicons is also not Font
+		//    Awesome, so it never belonged here.
+		// 2. Testing 'registered' at all is wrong: a handle that is registered
+		//    but not enqueued emits no CSS, so it provides no icons.
 		$fontawesome_handles = array(
 			'font-awesome',
 			'fontawesome',
 			'font-awesome-5',
 			'fontawesome-5',
+			'font-awesome-6',
+			'fontawesome-6',
 			'fa',
 			'fa5',
-			'dashicons' // WordPress includes some icons we could use as fallback
 		);
 
 		foreach ( $fontawesome_handles as $handle ) {
-			if ( wp_style_is( $handle, 'enqueued' ) || wp_style_is( $handle, 'registered' ) ) {
+			if ( wp_style_is( $handle, 'enqueued' ) ) {
 				// Font Awesome already available, don't load another copy
 				return;
 			}
