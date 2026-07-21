@@ -4,7 +4,7 @@ Donate link: https://github.com/sponsors/ahvega
 Tags: reading time, text-to-speech, accessibility, content, posts, shortcode, audio, speech synthesis, reading, wpm
 Requires at least: 5.0
 Tested up to: 6.4
-Stable tag: 1.0.0
+Stable tag: 1.1.1
 Requires PHP: 7.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -197,6 +197,56 @@ Security is a top priority:
 
 == Changelog ==
 
+= 1.1.1 - 2026-07-21 =
+**🔒 Security Release — update recommended for all sites**
+
+The `wp_read_tools_get_content` AJAX endpoint is registered for logged-out users,
+so it is reachable by anonymous remote callers. This release closes an
+unauthenticated content disclosure and hardens the surrounding checks.
+
+* **Fixed (security)**: Password-protected posts could be read without the
+  password. The endpoint gated only on `post_status === 'publish'`, but
+  password-protected posts keep that status — protection lives in
+  `post_password`. Access control now uses a post-type allowlist,
+  `is_post_publicly_viewable()` and `post_password_required()`.
+* **Fixed (security)**: Non-public post types stored with the `publish` status
+  (reusable blocks, field groups, private custom types) were readable by
+  enumerating numeric post IDs.
+* **Fixed (security)**: The cached-content lookup ran before the access check,
+  so cached bodies were served without any authorization test.
+* **Fixed (security)**: Rate limiting ran before nonce verification, letting
+  requests with no valid nonce allocate transients (database rows).
+* **Fixed (security)**: `X-Forwarded-For` / `CF-Connecting-IP` were trusted
+  unconditionally. Rotating the header bypassed the rate limit entirely, and
+  setting it to a third party's address locked that person out of the feature.
+  Proxy headers are now honoured only behind a proxy listed in the new
+  `wp_read_tools_trusted_proxies` filter, and `X-Forwarded-For` is parsed
+  right-to-left so a client-supplied prefix cannot win.
+* **Fixed**: Rate limiting silently disabled itself on containerised and
+  load-balanced installs, where the peer address is private and was being
+  rejected as invalid.
+* **Fixed**: The rate limiter refreshed its window on every request, so a
+  steady low-rate caller could stay blocked indefinitely once over the
+  threshold. It is now a fixed window.
+* **Added**: A per-request content-length cap, filterable via
+  `wp_read_tools_max_content_length` (default 500 KB), truncated on character
+  boundaries.
+
+= 1.1.0 =
+**🐛 Page Builder & Voice Fixes**
+
+* **Fixed**: Reading time showing 0.0 on Avada/Fusion Builder posts. Shortcode
+  tags are now stripped while preserving their inner content, instead of
+  `strip_shortcodes()` which removed the text inside registered shortcodes.
+* **Fixed**: Text-to-speech reading theme configuration data instead of article
+  text — replaced database meta-field extraction with standard `post_content`
+  retrieval.
+* **Fixed**: Speech synthesis errors caused by oversized or malformed content
+  from meta-field concatenation.
+* **Improved**: Voice selection prioritizes es-US Neural/Natural voices with a
+  Latin American Spanish fallback chain.
+* **Improved**: Speech rate and pitch set to natural defaults (1.0).
+
 = 1.0.0 - 2024-XX-XX =
 **🎉 Initial Release**
 
@@ -233,6 +283,9 @@ Security is a top priority:
     * Mobile device compatibility (iOS Safari 7+, Chrome Mobile 33+)
 
 == Upgrade Notice ==
+
+= 1.1.1 =
+🔒 **SECURITY**: Fixes an unauthenticated content disclosure — password-protected posts could be read without the password via the public AJAX endpoint. Also hardens rate limiting against spoofed proxy headers, which previously allowed both bypass and locking other visitors out. Update recommended for all sites. Note: sites reading aloud a custom post type behind a `publicly_queryable => false` registration will need the new `wp_read_tools_allowed_post_types` filter.
 
 = 1.0.0 =
 🚀 **NEW**: WP Read Tools brings reading time estimation and text-to-speech functionality to your WordPress site! Perfect for improving accessibility and user experience. Features browser-based speech synthesis, customizable reading speeds, and comprehensive developer tools. No external APIs required - everything works offline!
