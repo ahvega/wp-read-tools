@@ -107,53 +107,47 @@ class WP_Read_Tools_Shortcode {
 	private static function get_post_content_enhanced( $post_id, $content_id = '' ) {
 		$content = '';
 
-		// Strategy 1: Use custom content ID if provided
-		if ( ! empty( $content_id ) ) {
-			// Store the selector for JavaScript to use
-			update_post_meta( $post_id, '_wp_read_tools_content_selector', $content_id );
-		}
+		// NOTE: this method previously called update_post_meta() in four places
+		// to record '_wp_read_tools_content_selector' and
+		// '_wp_read_tools_needs_frontend_extraction'. Those writes have been
+		// removed. They were:
+		//
+		// - Unread. The only consumers were in the unreferenced page-builder
+		//   extraction path, deleted alongside this change.
+		// - A database write on every uncached front-end page render, by every
+		//   anonymous visitor, from what should be a pure read. The Avada branch
+		//   fired on essentially every post, since _avada_page_content is empty
+		//   in the common case and the guard tested for content shorter than
+		//   100 characters.
+		// - Cache-invalidating: each update_post_meta() call also fires
+		//   wp_cache_delete( $post_id, 'post_meta' ), discarding that post's
+		//   whole meta cache and forcing later meta reads to re-query.
+		//
+		// Shortcode rendering must have no persistent side effects.
 
-		// Strategy 2: Detect Avada Builder content
+		// Avada/Fusion Builder pages may hold their body copy in a meta field
+		// rather than post_content.
 		if ( function_exists( 'avada_get_theme_option' ) || class_exists( 'FusionBuilder' ) || get_template() === 'Avada' ) {
-			// Check for Avada page content
 			$avada_content = get_post_meta( $post_id, '_avada_page_content', true );
 			if ( ! empty( $avada_content ) ) {
 				$content = $avada_content;
 			}
-
-			// Alternative: Check if this is an Avada-built page
-			$fusion_page_data = get_post_meta( $post_id, 'fusion_builder_status', true );
-
-			if ( $fusion_page_data === 'active' && empty( $content ) ) {
-				// For Avada Builder pages, we'll rely on frontend content extraction
-				update_post_meta( $post_id, '_wp_read_tools_needs_frontend_extraction', 'yes' );
-			}
-
-			// Force frontend extraction for all Avada pages if content is minimal
-			if ( empty( trim( strip_tags( $content ) ) ) || strlen( trim( strip_tags( $content ) ) ) < 100 ) {
-				update_post_meta( $post_id, '_wp_read_tools_needs_frontend_extraction', 'yes' );
-			}
 		}
 
-		// Strategy 3: Detect Elementor content
-		if ( empty( $content ) && defined( 'ELEMENTOR_VERSION' ) ) {
-			if ( \Elementor\Plugin::$instance->db->is_built_with_elementor( $post_id ) ) {
-				// For Elementor, we need frontend extraction
-				update_post_meta( $post_id, '_wp_read_tools_needs_frontend_extraction', 'yes' );
-			}
-		}
-
-		// Strategy 4: Standard post content fallback
+		// Standard post content fallback.
 		if ( empty( $content ) ) {
 			$content = get_post_field( 'post_content', $post_id );
 		}
 
+		if ( ! is_string( $content ) ) {
+			$content = '';
+		}
+
 		// Log content detection for debugging
 		wp_read_tools_log( sprintf(
-			'Content detection for post %d: length=%d, needs_frontend=%s',
+			'Content detection for post %d: length=%d',
 			$post_id,
-			strlen( $content ),
-			get_post_meta( $post_id, '_wp_read_tools_needs_frontend_extraction', true ) ?: 'no'
+			strlen( $content )
 		) );
 
 		return $content;
