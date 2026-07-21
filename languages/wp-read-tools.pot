@@ -1,15 +1,15 @@
-# Copyright (C) 2025 Adalberto H. Vega
+# Copyright (C) 2026 Adalberto H. Vega
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: WP Read Tools 1.0.0\n"
+"Project-Id-Version: WP Read Tools 1.2.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/wp-read-tools\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-09-24T18:00:18+00:00\n"
+"POT-Creation-Date: 2026-07-21T20:20:54+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.11.0\n"
 "X-Domain: wp-read-tools\n"
@@ -39,28 +39,32 @@ msgstr ""
 msgid "https://inteldevign.com"
 msgstr ""
 
-#: includes/class-wp-read-tools-ajax.php:84
-msgid "Too many requests. Please try again later."
-msgstr ""
-
-#: includes/class-wp-read-tools-ajax.php:95
+#: includes/class-wp-read-tools-ajax.php:92
 msgid "Security check failed."
 msgstr ""
 
-#: includes/class-wp-read-tools-ajax.php:104
+#: includes/class-wp-read-tools-ajax.php:102
 msgid "Error: Post ID not provided."
 msgstr ""
 
-#: includes/class-wp-read-tools-ajax.php:114
+#: includes/class-wp-read-tools-ajax.php:112
 msgid "Error: Invalid post ID."
 msgstr ""
 
-#: includes/class-wp-read-tools-ajax.php:133
+#: includes/class-wp-read-tools-ajax.php:122
+msgid "Too many requests. Please try again later."
+msgstr ""
+
+#: includes/class-wp-read-tools-ajax.php:132
 msgid "Error: Post not found or not accessible."
 msgstr ""
 
-#: includes/class-wp-read-tools-ajax.php:144
+#: includes/class-wp-read-tools-ajax.php:184
 msgid "Error retrieving post content."
+msgstr ""
+
+#: includes/class-wp-read-tools-ajax.php:196
+msgid "Post content is empty."
 msgstr ""
 
 #: includes/class-wp-read-tools-enqueue.php:125
@@ -79,19 +83,19 @@ msgstr ""
 msgid "Error fetching content."
 msgstr ""
 
-#: includes/class-wp-read-tools-shortcode.php:111
+#: includes/class-wp-read-tools-shortcode.php:183
 msgid "Listen"
 msgstr ""
 
 #. translators: %s: Estimated reading time in minutes (potentially with decimals).
-#: includes/class-wp-read-tools-shortcode.php:156
+#: includes/class-wp-read-tools-shortcode.php:238
 msgid "Estimated reading time: %s minutes"
 msgstr ""
 
-#: includes/class-wp-read-tools-shortcode.php:161
+#: includes/class-wp-read-tools-shortcode.php:243
 msgid "Listen to this article"
 msgstr ""
 
-#: includes/class-wp-read-tools-shortcode.php:171
+#: includes/class-wp-read-tools-shortcode.php:253
 msgid "%s min read"
 msgstr ""
