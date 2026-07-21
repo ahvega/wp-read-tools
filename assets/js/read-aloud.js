@@ -52,17 +52,31 @@ jQuery(document).ready(function($) {
      *
      * @param {Event} e - The click event object
      */
-    $('.read-aloud-trigger').on('click', function(e) {
+    // Delegated binding: shortcodes rendered after DOM-ready (infinite scroll,
+    // AJAX archives, page-builder popups) would get no handler from a direct
+    // .on() binding against the elements present at load.
+    $(document).on('click', '.read-aloud-trigger', function(e) {
         e.preventDefault();
         const link = $(this);
         const postId = link.data('post-id');
-        const icon = link.find('.fas');
+        // Match Font Awesome 5 (.fas) and 6 (.fa-solid); a .fas-only selector
+        // silently matched nothing under FA6, so every icon state change no-oped.
+        const icon = link.find('.fas, .fa-solid').first();
         const originalLinkText = link.contents().filter(function() { return this.nodeType === 3; }).text().trim(); // More robust way to get text node
         let utterance = null; // Store the utterance object
         let currentLink = link; // Keep track of the link being processed
 
-        // Handle pause/resume if already speaking
-        if (speechSynthesis.speaking) {
+        // Handle pause/resume ONLY for the link that owns the current playback.
+        //
+        // This branch previously keyed on the global speechSynthesis.speaking
+        // alone, without checking WHICH link was clicked. With two [readtime]
+        // instances on one page: pause A, then click B -> B resumed A's audio
+        // and painted B's icon as "Pause", while originalReadAloudText still
+        // referred to A. When A ended only A was reset, leaving B showing a
+        // pause icon and "Pause" forever with no audio and no way back short of
+        // a page reload. It also made it impossible to ever start B while A was
+        // active, and rendered the switch-posts block below unreachable.
+        if (speechSynthesis.speaking && window.activeReadAloudLink && link.is(window.activeReadAloudLink)) {
             if (!window.speechState.isPaused) {
                 // Pause the narration
                 speechSynthesis.pause();
@@ -172,13 +186,27 @@ jQuery(document).ready(function($) {
                         // Wait for voices to be loaded (important for some browsers)
                         const voices = window.speechSynthesis.getVoices();
                         if (voices.length === 0) {
-                            window.speechSynthesis.onvoiceschanged = function() {
+                            // Chrome fires voiceschanged MORE THAN ONCE as local
+                            // and network voice lists populate. Assigning
+                            // .onvoiceschanged (a) called speak() on the same
+                            // utterance on every firing, queueing the article two
+                            // or three times, (b) clobbered any other script's
+                            // handler on the shared speechSynthesis object, and
+                            // (c) was never detached, so a voiceschanged event
+                            // minutes later re-spoke a stale utterance. { once }
+                            // plus a guard fixes all three.
+                            let hasSpoken = false;
+                            window.speechSynthesis.addEventListener('voiceschanged', function onVoices() {
+                                if (hasSpoken) {
+                                    return;
+                                }
+                                hasSpoken = true;
                                 findAndSetVoice(utterance, langCode);
                                 // Check again if the link is still active before speaking
                                 if (window.activeReadAloudLink && link.is(window.activeReadAloudLink)) {
                                     speakUtterance(utterance, link, icon, originalLinkText);
                                 }
-                            };
+                            }, { once: true });
                         } else {
                             findAndSetVoice(utterance, langCode);
                              // Check if the link is still active before speaking
@@ -375,7 +403,12 @@ jQuery(document).ready(function($) {
              currentUtterance: null,
              resumePoint: 0
          };
-         utterance = null;
+         // NOTE: `utterance = null;` used to sit here. `utterance` is declared
+         // with `let` inside the click handler, not in this scope, so in sloppy
+         // mode this silently created a global `window.utterance` and did
+         // nothing useful -- and under 'use strict' or ES-module bundling it
+         // would throw a ReferenceError on every reset, breaking the UI. The
+         // real per-utterance reference is cleared via speechState above.
      }
 
     /**
