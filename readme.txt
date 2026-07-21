@@ -139,19 +139,23 @@ Yes! WP Read Tools works with any post type including:
 **Content Requirement**: For optimal functionality with theme builders like Avada, Elementor, or similar page builders, ensure your post content is included in WordPress's native post content field (the main editor), not exclusively in page builder modules.
 
 **How it works:**
-* **Primary Source**: Native WordPress content field (recommended)
-* **Secondary Source**: Page builder meta fields (Avada, Elementor)
-* **Fallback**: Frontend content extraction when needed
+The plugin strips shortcode *tags* while preserving the text inside them. That is
+what makes page-builder content readable: WordPress's own `strip_shortcodes()`
+would delete each registered shortcode along with its body copy, which is exactly
+where builders store the article text.
+
+* **Reading time**: uses `_avada_page_content` when present, otherwise `post_content`
+* **Text-to-speech**: always uses `post_content`
 
 **Best Practices:**
-* Include at least a summary in the native WordPress editor
-* The plugin automatically detects and extracts content from page builder meta fields
-* For Avada: Content is extracted from `_avada_page_content` and other builder fields
-* For Elementor: Content is parsed from JSON data in `_elementor_data`
+* Include your content in the native WordPress editor - this is the reliable path
+* Note: as of 1.2.0 there is no Elementor `_elementor_data` extraction and no
+  frontend DOM extraction. Both existed in the code but never actually executed,
+  and were removed rather than left as misleading dead weight.
 
 **Troubleshooting**: If reading time seems inaccurate:
 1. Add content to the native WordPress post editor
-2. Use the `content_id` parameter: `[readtime content_id="main-content"]`
+2. (The `content_id` parameter is a deprecated no-op as of 1.2.0 and is ignored.)
 3. Check that your page builder content includes readable text
 
 = Can I add reading time automatically to all posts? =
@@ -228,9 +232,6 @@ Security is a top priority:
   stuck showing "Pause" indefinitely, unrecoverable without a page reload.
 * **Fixed**: In Chrome, articles could be queued and spoken two or three times
   because the voice-loading handler fired repeatedly and was never detached.
-* **Fixed**: Conditional asset loading was a no-op on every post and page — CSS,
-  JS and jQuery loaded whether or not the shortcode appeared. Use the
-  `wp_read_tools_force_load_assets` filter for theme-injected shortcodes.
 * **Fixed**: A database write occurred on every uncached page view, from every
   anonymous visitor, during shortcode rendering.
 * **Fixed**: Read-aloud links added to the page after load (infinite scroll,
@@ -328,7 +329,7 @@ unauthenticated content disclosure and hardens the surrounding checks.
 == Upgrade Notice ==
 
 = 1.2.0 =
-🐛 **FIXES**: Plugin icons now actually render (they never loaded on a stock install). Reading times were overstated by 10-15% in Spanish and other accented languages and are now correct. Fixes text corruption in posts starting with a one-letter word, stuck playback when a page has two read-aloud links, and a database write on every page view. Note: assets now load only on pages containing the shortcode — themes that inject `[readtime]` from a template file should use the `wp_read_tools_force_load_assets` filter.
+🐛 **FIXES**: Plugin icons now actually render (they never loaded on a stock install). Reading times were overstated by 10-15% in Spanish and other accented languages and are now correct. Fixes text corruption in posts starting with a one-letter word, stuck playback when a page has two read-aloud links, and a database write on every page view.
 
 = 1.1.1 =
 🔒 **SECURITY**: Fixes an unauthenticated content disclosure — password-protected posts could be read without the password via the public AJAX endpoint. Also hardens rate limiting against spoofed proxy headers, which previously allowed both bypass and locking other visitors out. Update recommended for all sites. Note: sites reading aloud a custom post type behind a `publicly_queryable => false` registration will need the new `wp_read_tools_allowed_post_types` filter.

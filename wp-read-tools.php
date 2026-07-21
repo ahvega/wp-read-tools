@@ -116,19 +116,18 @@ function wp_read_tools_clean_content( $content ) {
 		return '';
 	}
 
-	// Decode entities BEFORE stripping tags. Doing it after would resurrect
-	// "&lt;script&gt;" into real angle brackets in the output. ENT_QUOTES is
-	// explicit because the PHP 7.2-8.0 default (ENT_COMPAT) leaves &#039;
-	// undecoded, which the speech engine reads aloud character by character.
-	$text = html_entity_decode( $content, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-
-	// Resolve drop-cap shortcodes first, by name rather than by position. The
-	// previous heuristic anchored on the start of the document with
+	// Resolve drop-cap shortcodes by name rather than by position. The previous
+	// heuristic anchored on the start of the document with
 	// '/^(\pL)\s+(\pL)/u', which both over- and under-triggered: it joined the
 	// first two words of any text opening with a one-letter word -- "A mi me
 	// gusta" became "Ami me gusta", and likewise for Y, O, E and English "I" --
 	// while fixing only the FIRST drop-cap in a document that had several.
-	$text = preg_replace( '/\[(fusion_)?dropcap[^\]]*\](.*?)\[\/(fusion_)?dropcap\]\s*/isu', '$2', $text );
+	//
+	// Trailing whitespace is deliberately NOT consumed. We operate on raw
+	// post_content, where the author's spacing is authoritative: eating it
+	// would turn "[dropcap]A[/dropcap] post about X" into "Apost about X".
+	// The no-space form "[dropcap]O[/dropcap]rando" already yields "Orando".
+	$text = preg_replace( '/\[(fusion_)?dropcap[^\]]*\](.*?)\[\/(fusion_)?dropcap\]/isu', '$2', $content );
 
 	// Remove remaining shortcode tags, keeping inner text.
 	//
@@ -138,14 +137,37 @@ function wp_read_tools_clean_content( $content ) {
 	// The pattern also tolerates the [[escaped]] form WordPress uses to display
 	// a shortcode literally.
 	//
-	// Known limitation: an alphabetic editorial bracket such as [sic] is
-	// indistinguishable from a shortcode by pattern alone and is still removed.
-	// Matching against the registered $shortcode_tags table would fix that, at
-	// the cost of leaking raw tags whenever the registering plugin is inactive
-	// -- exactly the page-builder case this function exists to handle.
+	// Known limitations, all pre-existing and all with the same root cause --
+	// this matches by shape, not against the registered $shortcode_tags table:
+	//   - "[sic]" and other single-word editorial brackets are removed.
+	//   - "[our guide](https://...)" loses its markdown anchor text.
+	//   - "[Note some remark]" is removed, though "[Note: some remark]" now
+	//     survives, since a colon is not the whitespace the pattern requires.
+	// Matching $shortcode_tags would fix all three, at the cost of leaking raw
+	// tags whenever the registering plugin is inactive -- exactly the page
+	// builder case this function exists to handle. Not changed here.
 	$text = preg_replace( '/\[\[?\/?[a-z][a-z0-9_-]*(?:\s[^\]]*)?\]?\]/iu', '', $text );
 
 	$text = wp_strip_all_tags( $text );
+
+	// Decode entities AFTER stripping tags, not before.
+	//
+	// Decoding first looks safer but destroys content: strip_tags() treats a
+	// bare "<" as the start of a tag and eats everything to the end of the
+	// string, so "We have &lt; 5 minutes" would decode to "We have < 5 minutes"
+	// and then strip down to "We have ". Prose about HTML ("the &lt;video&gt;
+	// tag") loses the tag name the same way.
+	//
+	// ENT_QUOTES | ENT_HTML5 is the actual fix that was needed here: the PHP
+	// 7.2-8.0 default (ENT_COMPAT) leaves &#039; undecoded, so the speech
+	// engine reads apostrophes out character by character.
+	//
+	// Consequence to be aware of: an escaped "&lt;script&gt;" in the source
+	// survives as the literal text "<script>". That is correct for speech
+	// synthesis, which is this function's only consumer, but anything hooking
+	// wp_read_tools_speech_content and RENDERING the result as HTML must
+	// escape it first.
+	$text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 
 	// Normalize whitespace. The /u modifier plus an explicit non-breaking space
 	// matters: &nbsp; (U+00A0) is pervasive in page-builder output and is not

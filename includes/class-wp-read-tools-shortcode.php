@@ -85,26 +85,18 @@ class WP_Read_Tools_Shortcode {
 	 * The plugin will extract content from page builders as a secondary source, but
 	 * works best when there's at least a summary in the native content field.
 	 *
-	 * Attempts to retrieve post content using multiple strategies:
-	 * 1. Custom content ID selector (if provided via shortcode parameter)
-	 * 2. Avada Builder content detection from meta fields
-	 * 3. Elementor content detection from JSON data
-	 * 4. Standard post content fallback (always recommended to populate)
-	 *
-	 * Content Detection Priority:
-	 * - Primary: Native WordPress post content field (post_content)
-	 * - Secondary: Page builder meta fields (_avada_page_content, _elementor_data, etc.)
-	 * - Fallback: Frontend content extraction (marked for JavaScript processing)
+	 * Retrieval order:
+	 * 1. Avada/Fusion Builder body copy from _avada_page_content, when present
+	 * 2. Standard post_content
 	 *
 	 * @since  1.0.1
 	 * @access private
 	 * @static
 	 *
-	 * @param  int    $post_id    Post ID to retrieve content for.
-	 * @param  string $content_id Optional CSS selector ID for custom content container.
-	 * @return string             Post content or empty string if not found.
+	 * @param  int $post_id Post ID to retrieve content for.
+	 * @return string       Post content, or empty string if not found.
 	 */
-	private static function get_post_content_enhanced( $post_id, $content_id = '' ) {
+	private static function get_post_content_enhanced( $post_id ) {
 		$content = '';
 
 		// NOTE: this method previously called update_post_meta() in four places
@@ -169,7 +161,9 @@ class WP_Read_Tools_Shortcode {
 	 *     @type int    $wpm        Reading speed in words per minute. Default 180.
 	 *     @type string $link_text  Text for the read-aloud link. Default 'Listen'.
 	 *     @type string $icon_class Font Awesome icon class for the read-aloud button. Default 'fas fa-headphones'.
-	 *     @type string $content_id CSS selector ID for custom content container. Default empty (uses post content).
+	 *     @type string $content_id Deprecated no-op, accepted for backward compatibility.
+	 *                              Its only consumer was the frontend-extraction path,
+	 *                              which never executed and was removed in 1.2.0.
 	 * }
 	 * @return string HTML output for the shortcode. Returns empty string if post ID is not found.
 	 */
@@ -188,7 +182,7 @@ class WP_Read_Tools_Shortcode {
 				'wpm'        => 180,     // Average reading speed (words per minute).
 				'link_text'  => __( 'Listen', 'wp-read-tools' ), // Translatable link text.
 				'icon_class' => 'fas fa-headphones', // Ensure space between classes
-				'content_id' => '',      // CSS selector ID for custom content container
+				'content_id' => '',      // Deprecated no-op; see render_shortcode() docblock.
 			),
 			$atts,
 			'readtime' // Shortcode tag used for filtering attributes.
@@ -201,7 +195,12 @@ class WP_Read_Tools_Shortcode {
 		$link_text  = sanitize_text_field( $atts['link_text'] );
 		// Use sanitize_text_field instead of sanitize_html_class to preserve spaces
 		$icon_class = sanitize_text_field( $atts['icon_class'] );
-		$content_id = sanitize_text_field( $atts['content_id'] );
+		// NOTE: the 'content_id' attribute is still accepted so existing
+		// shortcodes do not change behaviour, but it is a no-op and always was.
+		// Its only consumer was the frontend-extraction path, which never ran
+		// and was removed in 1.2.0. Documented as deprecated rather than
+		// dropped from shortcode_atts(), so [readtime content_id="x"] keeps
+		// working exactly as before -- which is to say, it is ignored.
 
 		// Ensure WPM is reasonable.
 		if ( $wpm < 1 ) {
@@ -212,7 +211,7 @@ class WP_Read_Tools_Shortcode {
 		$wpm = apply_filters( 'wp_read_tools_wpm', $wpm, $post_id );
 
 		// Get the post content using enhanced detection for page builders
-		$content = self::get_post_content_enhanced( $post_id, $content_id );
+		$content = self::get_post_content_enhanced( $post_id );
 
 		// Shared with the speech path so the two can never disagree again.
 		$stripped_content = wp_read_tools_clean_content( $content );

@@ -181,11 +181,23 @@ class WP_Read_Tools_Enqueue {
 				}
 			}
 
-			// Previously this returned true unconditionally, which made the
-			// whole "conditional loading" optimization a no-op on every
-			// singular page - the CSS, JS, jQuery and the Font Awesome CDN
-			// stylesheet loaded whether or not [readtime] appeared anywhere.
-			return false;
+			// Load on singular pages even when neither check matched.
+			//
+			// This looks like it defeats the optimization, and on singular
+			// pages it does. It is deliberate: has_shortcode() only sees the
+			// stored post_content, so a theme calling
+			// do_shortcode( '[readtime]' ) from single.php, a widget, or a
+			// template part is invisible here. Returning false in that case
+			// ships the markup with no CSS and no click handler, which is
+			// exactly the regression documented in
+			// BUGFIX_CONDITIONAL_LOADING.md -- the "before" state there is
+			// literally `return false; // This broke theme-based shortcodes`.
+			//
+			// Do not "optimize" this away without first giving theme-injected
+			// shortcodes a detection path that actually works. The saving is
+			// real only on archives, home and search, which the branch below
+			// already handles.
+			return true;
 		}
 
 		// Check for shortcode in queried posts (for archive pages, search results, etc.)
