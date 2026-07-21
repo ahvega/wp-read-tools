@@ -214,29 +214,24 @@ class WP_Read_Tools_Shortcode {
 		// Get the post content using enhanced detection for page builders
 		$content = self::get_post_content_enhanced( $post_id, $content_id );
 
-		// Remove shortcode tags but preserve inner content (critical for page builders
-		// like Avada/Fusion Builder whose registered shortcodes would be removed entirely
-		// by strip_shortcodes(), including the text content within them).
-		$stripped_content = preg_replace( '/\[\/?\w[^\]]*\]/', '', $content );
-		$stripped_content = wp_strip_all_tags( $stripped_content );
-
-		// Fix drop-cap artifact: when a drop-cap shortcode wraps a single letter,
-		// stripping tags leaves a space between the letter and the rest of the word
-		// (e.g. [fusion_dropcap]O[/fusion_dropcap] rando → "O rando" instead of "Orando").
-		$stripped_content = trim( $stripped_content );
-		$stripped_content = preg_replace( '/^(\pL)\s+(\pL)/u', '$1$2', $stripped_content );
+		// Shared with the speech path so the two can never disagree again.
+		$stripped_content = wp_read_tools_clean_content( $content );
 
 		// Allow filtering of content before word count calculation
 		$stripped_content = apply_filters( 'wp_read_tools_content_before_count', $stripped_content, $post_id );
 
-		$word_count = str_word_count( $stripped_content );
+		$word_count = wp_read_tools_count_words( $stripped_content );
 
 		// Calculate reading time in minutes.
 		$minutes_exact = ( $word_count > 0 && $wpm > 0 ) ? ( $word_count / $wpm ) : 0;
 		$minutes_exact = round( $minutes_exact, 2 ); // Round to 2 decimal places for precision.
 
-		// Round up to the nearest 0.5 for display.
+		// Round up to the nearest 0.5 for display, with a 0.5 floor so that a
+		// short post reads "0.5 min read" rather than "0.0 min read".
 		$rounded_minutes = ceil( $minutes_exact * 2 ) / 2;
+		if ( $rounded_minutes < 0.5 ) {
+			$rounded_minutes = 0.5;
+		}
 
 		// Prepare the text for the reading time tooltip.
 		$read_time_tooltip_text = sprintf(

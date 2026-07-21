@@ -300,29 +300,16 @@ class WP_Read_Tools_Ajax {
 	 * @return string          Processed content ready for speech synthesis.
 	 */
 	private static function process_content_for_speech( $content, $post_id ) {
-		// Remove shortcode tags but preserve inner content (critical for page builders
-		// like Avada/Fusion Builder whose registered shortcodes would be removed entirely
-		// by strip_shortcodes(), including the text content within them).
-		$stripped_content = preg_replace( '/\[\/?\w[^\]]*\]/', '', $content );
-		$stripped_content = wp_strip_all_tags( $stripped_content );
+		$stripped_content = wp_read_tools_clean_content( $content );
 
-		// Fix drop-cap artifact: when a drop-cap shortcode wraps a single letter,
-		// stripping tags leaves a space between the letter and the rest of the word
-		// (e.g. [fusion_dropcap]O[/fusion_dropcap] rando → "O rando" instead of "Orando").
-		$stripped_content = trim( $stripped_content );
-		$stripped_content = preg_replace( '/^(\pL)\s+(\pL)/u', '$1$2', $stripped_content );
-
-		// Decode HTML entities that might remain after stripping tags
-		$stripped_content = html_entity_decode( $stripped_content );
-
-		// Allow filtering of content before speech synthesis
+		// Allow filtering of content before speech synthesis.
+		//
+		// NOTE: consumers of this filter receive plain text with entities
+		// already decoded. Anything that renders the result as HTML rather than
+		// passing it to speech synthesis must escape it itself.
 		$stripped_content = apply_filters( 'wp_read_tools_speech_content', $stripped_content, $post_id );
 
-		// Normalize whitespace
-		$stripped_content = preg_replace( '/\s+/', ' ', $stripped_content );
-		$stripped_content = trim( $stripped_content );
-
-		return $stripped_content;
+		return is_string( $stripped_content ) ? trim( $stripped_content ) : '';
 	}
 
 	/**
