@@ -16,8 +16,8 @@ A WordPress plugin that adds **reading time estimation** and **text-to-speech** 
 - **Reading Time Estimation** — Word count-based calculation at configurable WPM, locale-aware formatting
 - **Text-to-Speech** — Native Web Speech API with pause/resume/stop controls
 - **Smart Voice Selection** — Prioritizes es-US Neural voices, falls back through Latin American Spanish variants
-- **Page Builder Support** — Compatible with Avada/Fusion Builder and Elementor content extraction
-- **Conditional Asset Loading** — Scripts and styles only load on pages that use the shortcode
+- **Page Builder Support** — Reads content from Avada/Fusion Builder and Elementor shortcodes by preserving shortcode inner text
+- **Conditional Asset Loading** — Scripts and styles are skipped on archives, home and search pages with no shortcode
 - **Security** — Nonce verification, input sanitization, rate limiting, published-posts-only access
 - **i18n Ready** — Translation-ready with Spanish (es_ES) included
 
@@ -45,7 +45,6 @@ Upload `wp-read-tools/` to `/wp-content/plugins/` and activate via WordPress adm
 [readtime]                                    # Reading time only
 [readtime read-aloud="yes"]                   # With text-to-speech
 [readtime read-aloud="yes" wpm="200"]         # Custom reading speed
-[readtime read-aloud="yes" content_id="main"] # Custom content selector
 ```
 
 ### Parameters
@@ -57,7 +56,7 @@ Upload `wp-read-tools/` to `/wp-content/plugins/` and activate via WordPress adm
 | `class` | `"readtime"` | CSS class for container |
 | `link_text` | `"Listen"` | TTS button text |
 | `icon_class` | `"fas fa-headphones"` | Font Awesome icon class |
-| `content_id` | `""` | Custom content container CSS selector |
+| `content_id` | `""` | **Deprecated no-op.** Accepted for backward compatibility but ignored; its only consumer never executed and was removed in 1.2.0 |
 
 ### Theme Integration
 
@@ -151,13 +150,10 @@ speechSynthesis.getVoices().filter(v => v.lang.startsWith('es'));
 - **Fixed**: latin1-imported content could silently yield empty speech and "0.0 min read"
 - **Fixed**: Two read-aloud links on one page — pausing one and clicking the other resumed the first and left the second stuck on "Pause" permanently
 - **Fixed**: Chrome could queue and speak an article two or three times (voice-loading handler fired repeatedly, never detached)
-- **Fixed**: Conditional asset loading was a no-op on every post and page
 - **Fixed**: A database write on every uncached page view, from every anonymous visitor, during shortcode render
 - **Fixed**: Links added after page load (infinite scroll, AJAX archives) had no click handler
 - **Removed**: 412 lines of unreachable page-builder extraction code
 - **Changed**: Very short posts read "0.5 min read" instead of "0.0 min read"
-
-**Upgrade note**: assets now load only on pages where `[readtime]` is detected. Themes injecting the shortcode from a template file should use `wp_read_tools_force_load_assets`.
 
 ### 1.1.1 — Security release
 
