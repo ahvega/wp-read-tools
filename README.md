@@ -3,7 +3,7 @@
 [![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-21759B?style=flat-square&logo=wordpress&logoColor=white)](https://wordpress.org/)
 [![PHP](https://img.shields.io/badge/PHP-7.2%2B-777BB4?style=flat-square&logo=php&logoColor=white)](https://php.net/)
 [![License](https://img.shields.io/badge/License-GPL%20v2-blue?style=flat-square)](https://www.gnu.org/licenses/gpl-2.0.html)
-[![Version](https://img.shields.io/badge/Version-1.1.0-brightgreen?style=flat-square)](https://github.com/ahvega/wp-read-tools/releases)
+[![Version](https://img.shields.io/badge/Version-1.1.1-brightgreen?style=flat-square)](https://github.com/ahvega/wp-read-tools/releases)
 [![Web Speech API](https://img.shields.io/badge/TTS-Web%20Speech%20API-FF6F00?style=flat-square&logo=google-chrome&logoColor=white)](#text-to-speech)
 [![Avada Compatible](https://img.shields.io/badge/Avada-Compatible-E44D26?style=flat-square)](#page-builder-support)
 [![Elementor Compatible](https://img.shields.io/badge/Elementor-Compatible-92003B?style=flat-square)](#page-builder-support)
@@ -140,6 +140,21 @@ speechSynthesis.getVoices().filter(v => v.lang.startsWith('es'));
 ```
 
 ## Changelog
+
+### 1.1.1 — Security release
+
+The `wp_read_tools_get_content` AJAX endpoint is registered for logged-out users and is therefore reachable by anonymous remote callers. **Update recommended for all sites.**
+
+- **Security**: Password-protected posts could be read without the password. The endpoint gated only on `post_status === 'publish'`, but password-protected posts keep that status — protection lives in `post_password`. Access control now combines a post-type allowlist, `is_post_publicly_viewable()` and `post_password_required()`
+- **Security**: Non-public post types stored as `publish` (reusable blocks, field groups, private CPTs) were readable by enumerating post IDs
+- **Security**: The cache lookup ran before the access check, serving cached bodies without authorization
+- **Security**: Rate limiting ran before nonce verification, letting nonce-less requests allocate transients
+- **Security**: `X-Forwarded-For` / `CF-Connecting-IP` were trusted unconditionally — rotating the header bypassed the rate limit, and setting it to a third party's address locked that person out. Now gated behind the new `wp_read_tools_trusted_proxies` filter and parsed right-to-left
+- **Fixed**: Rate limiting silently disabled itself on containerised/load-balanced installs where the peer address is private
+- **Fixed**: The limiter refreshed its window on every request, so a steady low-rate caller could stay blocked indefinitely. Now a fixed window
+- **Added**: `wp_read_tools_max_content_length` cap (default 500 KB), truncated on character boundaries
+
+**Upgrade note**: the post-type allowlist defaults to all publicly-registered types. Sites reading aloud a type registered `publicly_queryable => false` must opt in via `wp_read_tools_allowed_post_types`.
 
 ### 1.1.0
 - **Fixed**: Reading time showing 0.0 for Avada/Fusion Builder posts — shortcode tags are now stripped while preserving inner content instead of using `strip_shortcodes()` which removed content within registered shortcodes
