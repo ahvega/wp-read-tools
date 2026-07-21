@@ -3,7 +3,7 @@
 [![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-21759B?style=flat-square&logo=wordpress&logoColor=white)](https://wordpress.org/)
 [![PHP](https://img.shields.io/badge/PHP-7.2%2B-777BB4?style=flat-square&logo=php&logoColor=white)](https://php.net/)
 [![License](https://img.shields.io/badge/License-GPL%20v2-blue?style=flat-square)](https://www.gnu.org/licenses/gpl-2.0.html)
-[![Version](https://img.shields.io/badge/Version-1.1.1-brightgreen?style=flat-square)](https://github.com/ahvega/wp-read-tools/releases)
+[![Version](https://img.shields.io/badge/Version-1.2.0-brightgreen?style=flat-square)](https://github.com/ahvega/wp-read-tools/releases)
 [![Web Speech API](https://img.shields.io/badge/TTS-Web%20Speech%20API-FF6F00?style=flat-square&logo=google-chrome&logoColor=white)](#text-to-speech)
 [![Avada Compatible](https://img.shields.io/badge/Avada-Compatible-E44D26?style=flat-square)](#page-builder-support)
 [![Elementor Compatible](https://img.shields.io/badge/Elementor-Compatible-92003B?style=flat-square)](#page-builder-support)
@@ -140,6 +140,24 @@ speechSynthesis.getVoices().filter(v => v.lang.startsWith('es'));
 ```
 
 ## Changelog
+
+### 1.2.0 — Correctness & performance
+
+- **Fixed**: Font Awesome never loaded on a stock install — the plugin's icons rendered as nothing unless the theme shipped Font Awesome. The conflict check included `dashicons`, which core registers unconditionally, so it always matched. FA6 class names now recognised
+- **Fixed**: Reading times inflated ~10–15% in Spanish, French, Portuguese and German — `str_word_count()` is byte-oriented and split every accented word ("canción" = 2 words). Digits were never counted
+- **Fixed**: Posts opening with a one-letter word were corrupted — "A mi me gusta" → "Ami me gusta" (A, Y, O, E in Spanish; "I" in English). Drop-caps now matched by name, fixing every occurrence rather than only the first
+- **Fixed**: Citation markers `[1]`, `[15]` were deleted from spoken text and word counts
+- **Fixed**: `&#039;` apostrophes read aloud character by character; `&nbsp;` leaked into speech
+- **Fixed**: latin1-imported content could silently yield empty speech and "0.0 min read"
+- **Fixed**: Two read-aloud links on one page — pausing one and clicking the other resumed the first and left the second stuck on "Pause" permanently
+- **Fixed**: Chrome could queue and speak an article two or three times (voice-loading handler fired repeatedly, never detached)
+- **Fixed**: Conditional asset loading was a no-op on every post and page
+- **Fixed**: A database write on every uncached page view, from every anonymous visitor, during shortcode render
+- **Fixed**: Links added after page load (infinite scroll, AJAX archives) had no click handler
+- **Removed**: 412 lines of unreachable page-builder extraction code
+- **Changed**: Very short posts read "0.5 min read" instead of "0.0 min read"
+
+**Upgrade note**: assets now load only on pages where `[readtime]` is detected. Themes injecting the shortcode from a template file should use `wp_read_tools_force_load_assets`.
 
 ### 1.1.1 — Security release
 

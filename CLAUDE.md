@@ -25,11 +25,28 @@ The plugin follows WordPress coding standards with a modular class-based archite
 ## Key Features Implementation
 
 ### Reading Time Calculation
-- Uses `str_word_count()` on stripped content
-- Shortcode tags stripped via regex (`preg_replace`) to preserve inner content (critical for page builders like Avada/Fusion Builder)
+- Counts words with `wp_read_tools_count_words()` — a `\p{L}\p{N}` pattern, **not**
+  `str_word_count()`, which is byte-oriented and splits every accented word
+  (`canción` → `canci` + `n`), inflating Spanish reading times by 10–15%
+- Text is cleaned by the shared `wp_read_tools_clean_content()` (see below)
 - Default 180 WPM, customizable via shortcode attribute
-- Rounds **up** to the next 0.5 minute (`ceil($minutes * 2) / 2`) — not nearest
+- Rounds **up** to the next 0.5 minute (`ceil($minutes * 2) / 2`), floored at 0.5
 - Supports localized number formatting (special handling for Spanish locales)
+
+### Shared text pipeline — `wp_read_tools_clean_content()` (in `wp-read-tools.php`)
+Both the reading-time count and the speech path go through this one function.
+They previously held byte-identical copies, so every bug in it existed twice.
+Do not re-inline it. Non-obvious constraints it encodes:
+- Entities are decoded **before** tag stripping (decoding after would resurrect
+  `&lt;script&gt;` into real markup), with explicit `ENT_QUOTES | ENT_HTML5`
+- Drop-caps are matched by shortcode name, not by position. The old
+  `^`-anchored heuristic corrupted any text starting with a one-letter word —
+  `A mi me gusta` → `Ami me gusta`
+- The shortcode pattern requires a leading letter so numeric citations (`[1]`,
+  `[15]`) survive. Known limitation: `[sic]` is still stripped
+- Whitespace normalization needs `/u` and an explicit `\x{00A0}` — `&nbsp;` is
+  everywhere in page-builder output
+- `preg_replace()` returns `null` on malformed UTF-8; results are guarded
 
 ### Text-to-Speech
 - Browser-based Speech Synthesis API
@@ -49,11 +66,16 @@ The plugin follows WordPress coding standards with a modular class-based archite
 - `wp_read_tools_log()` writes debug output only when `WP_DEBUG` is enabled.
 
 ### Conditional Asset Loading
-CSS/JS load only on pages where the shortcode is detected. Detection is
-deliberately broad (post content, widgets, theme templates) because
-theme-inserted shortcodes are otherwise missed — see
-`BUGFIX_CONDITIONAL_LOADING.md`. Override with the
-`wp_read_tools_force_load_assets` filter.
+CSS/JS load only where `has_shortcode()` finds `[readtime]`. Before 1.2.0 every
+`is_singular()` branch fell through to `return true`, so the optimization was a
+no-op on every post and page — assets loaded regardless. That fallthrough was
+standing in for theme-injected shortcodes; the supported mechanism for those is
+the `wp_read_tools_force_load_assets` filter. See `BUGFIX_CONDITIONAL_LOADING.md`.
+
+Font Awesome detection tests `wp_style_is( $handle, 'enqueued' )` only, and must
+never include `dashicons` — core registers dashicons unconditionally, so testing
+`'registered'` against it made the CDN enqueue unreachable and the plugin's icons
+never rendered on a stock install.
 
 ## Filter API
 
@@ -72,17 +94,23 @@ The plugin's entire extension surface. Prefer these over editing core files:
 | `wp_read_tools_force_load_assets` | Force asset enqueue regardless of detection |
 | `wp_read_tools_load_fontawesome` | Skip the Font Awesome CDN enqueue |
 
-## Known Dead Code — do not build on it
+## Page-builder support — how it actually works
 
-`class-wp-read-tools-ajax.php` contains an unreferenced page-builder
-extraction subsystem (~200 lines): `get_post_content_for_speech()`,
-`extract_page_builder_content()`, `extract_text_from_elementor_data()`,
-`extract_all_content_from_database()`, `extract_text_from_array()`.
+Removed in 1.2.0: an unreferenced ~412-line extraction subsystem
+(`get_post_content_for_speech()`, `extract_all_content_from_database()` and
+friends in PHP, `extractFrontendContent()` in JS). It never ran, and its docs
+claimed a mechanism the plugin does not use. Do not reintroduce it.
 
-`handle_get_content_request()` calls `get_post_field()` directly and never
-enters this path, so **Elementor/Avada meta extraction does not actually run**.
-Verify call sites before assuming any of it is live; either wire it up
-deliberately or delete it — do not extend it in place.
+What makes Avada/Fusion Builder work is much simpler: `wp_read_tools_clean_content()`
+strips shortcode *tags* while preserving their inner text. `strip_shortcodes()`
+would delete the whole registered shortcode including the body copy, which is
+where builders keep the article. That single behaviour is load-bearing — keep it.
+
+One inconsistency remains: `get_post_content_enhanced()` (shortcode path) still
+prefers `_avada_page_content` over `post_content` for the word count, while the
+speech path always uses `post_content`. On Avada sites the two can disagree.
+Left alone deliberately in 1.2.0 because changing it is a behaviour change, not
+a cleanup.
 
 ## Development Commands
 
