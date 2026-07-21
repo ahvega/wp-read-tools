@@ -119,40 +119,43 @@ unauthenticated remote users on every site running this plugin.** Treat it as a
 public attack surface; changes there deserve blocking review findings, not style
 comments.
 
-Protections currently in place:
-- Nonce verification on every request (CSRF)
-- Post IDs validated via `intval()` with a `> 0` check
-- Shortcode tags stripped via regex (preserves inner text); HTML stripped via
-  `wp_strip_all_tags()` before speech synthesis
+**Check order in `handle_get_content_request()` is load-bearing — preserve it:**
 
-Known weaknesses — do not regress these, and prefer fixing them:
-- **The `publish`-status check is not an access-control check.** It is the only
-  gate on the endpoint, and it is insufficient in two ways:
-  - Password-protected posts keep `post_status = 'publish'` (protection lives in
-    `post_password`), so their full plaintext is served to anonymous callers.
-    Use `post_password_required()`.
-  - `post_type` is never checked, so `publish`-status internal types
-    (`wp_block`, ACF field groups, non-public CPTs) are readable by ID
-    enumeration. Use `is_post_publicly_viewable()` plus a post-type allowlist.
+1. nonce verification (before anything that writes state)
+2. post ID validation
+3. rate limiting (only nonce-verified requests may allocate a transient)
+4. `is_post_readable()` access control
+5. cache lookup (only once the request is known to be authorized)
+6. content fetch + length cap
 
-  The nonce does not mitigate this: for logged-out users `wp_create_nonce()` is
-  bound to user 0, so the value printed on any public page is valid for every
-  anonymous requester.
-- **Rate-limit keying is spoofable and weaponizable.** `get_client_ip()` trusts
-  `HTTP_CF_CONNECTING_IP` / `HTTP_X_FORWARDED_FOR` without verifying a trusted
-  proxy. Rotating the header bypasses the limit; *setting* it to a victim's IP
-  locks that victim out. Without a persistent object cache each request also
-  writes two `wp_options` rows, so header rotation floods the table. Default to
-  `REMOTE_ADDR`; consult proxy headers only behind a configured trusted proxy.
-- **No maximum content-length cap.** An unbounded post is read, regex-processed,
-  and cached on every request. Documented in `OPTIMIZATION_RECOMMENDATIONS.md`
-  and still real.
-- **Error responses carry `debug` keys** (`nonce_verification_failed`, etc.) to
-  unauthenticated callers. Low risk — static literals only.
+Each ordering was a real vulnerability before v1.1.1: rate limiting ahead of the
+nonce let anonymous callers write `wp_options` rows, and the cache lookup ahead
+of the access check served content without any authorization test.
 
-Caching note: the `wp_cache_get()` lookup runs *before* the accessibility check,
-so on hosts with a persistent object cache a visibility change can leave content
-servable. Any fix must move the lookup after the checks.
+Invariants — regressing any of these reopens a disclosed vulnerability:
+- **`post_status === 'publish'` is NOT an access-control check.** Password-protected
+  posts keep the `publish` status; protection lives in `post_password`. Always go
+  through `is_post_readable()`, which combines a post-type allowlist,
+  `is_post_publicly_viewable()` (with a WP 5.0 fallback mirroring
+  `is_post_type_viewable()`), and `post_password_required()`.
+- **The nonce is not an authorization boundary.** For logged-out users
+  `wp_create_nonce()` is bound to user 0, so the value on any public page is
+  valid for every anonymous requester. It is CSRF protection only.
+- **Never trust proxy headers by default.** `X-Forwarded-For` is *appended* to, so
+  its leftmost entry is attacker-controlled even behind a real proxy — parse
+  right-to-left, discarding known proxies. Headers are consulted only when the
+  peer is listed in `wp_read_tools_trusted_proxies`. Trusting them unconditionally
+  allowed both limit bypass and a victim-lockout DoS.
+- **Truncate on character boundaries.** The `/u` regexes in
+  `process_content_for_speech()` return `null` on malformed UTF-8, so a byte-wise
+  cut turns the size cap into an empty response.
+
+Remaining accepted limitations:
+- The transient read-modify-write is not atomic; concurrent requests sharing a key
+  can slightly overshoot the cap. It is a throttle, not a quota.
+- Sites behind an unconfigured proxy share one rate-limit bucket. Deliberate: the
+  alternative is trusting spoofable headers.
+- Post-auth error responses still carry static `debug` keys. Low risk.
 
 Never commit real site data: no live DB dumps, no client hostnames, no customer
 URLs in docs or fixtures. Use generic placeholders.
