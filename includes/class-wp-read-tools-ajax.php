@@ -77,33 +77,17 @@ class WP_Read_Tools_Ajax {
 	public static function handle_get_content_request() {
 		wp_read_tools_log( 'AJAX request received for content retrieval' );
 
-		// Check rate limiting first (but be more lenient for debugging)
-		if ( ! self::check_rate_limit() ) {
-			wp_read_tools_log( 'AJAX request blocked due to rate limiting', 'warning' );
-			// Send a more specific error for debugging
-			wp_send_json_error(
-				array(
-					'message' => __( 'Too many requests. Please try again later.', 'wp-read-tools' ),
-					'debug' => 'rate_limit_exceeded'
-				),
-				429 // Too Many Requests
-			);
-			wp_die();
-		}
-
-		// Verify the security nonce.
+		// Verify the security nonce BEFORE any state-creating work. The rate
+		// limiter writes transients, so running it first let unauthenticated
+		// callers create rows in wp_options without presenting a nonce at all.
 		// The nonce name 'read_aloud_nonce' should match the one created in WP_Read_Tools_Enqueue.
 		// The key 'nonce' should match the key sent in the AJAX data from read-aloud.js.
 		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_key( $_POST['nonce'] ), 'read_aloud_nonce' ) ) {
 			wp_read_tools_log( 'AJAX request failed nonce verification', 'error' );
 			wp_send_json_error(
-				array(
-					'message' => __( 'Security check failed.', 'wp-read-tools' ),
-					'debug' => 'nonce_verification_failed'
-				),
+				array( 'message' => __( 'Security check failed.', 'wp-read-tools' ) ),
 				403 // Forbidden
 			);
-			wp_die();
 		}
 
 		wp_read_tools_log( 'AJAX nonce verification passed' );
@@ -114,7 +98,6 @@ class WP_Read_Tools_Ajax {
 				array( 'message' => __( 'Error: Post ID not provided.', 'wp-read-tools' ) ),
 				400 // Bad Request
 			);
-			wp_die();
 		}
 
 		// Sanitize and validate the post ID.
@@ -124,31 +107,50 @@ class WP_Read_Tools_Ajax {
 				array( 'message' => __( 'Error: Invalid post ID.', 'wp-read-tools' ) ),
 				400 // Bad Request
 			);
-			wp_die();
 		}
 
-		// Check cache first
-		$cached_content = self::get_cached_content( $post_id );
-		if ( $cached_content !== false ) {
-			wp_read_tools_log( "Serving cached content for post ID: {$post_id}" );
-			wp_send_json_success( array( 'content' => $cached_content ) );
-			wp_die();
+		// Rate limiting runs after the nonce check so that only requests which
+		// already passed CSRF verification can allocate a transient.
+		if ( ! self::check_rate_limit() ) {
+			wp_read_tools_log( 'AJAX request blocked due to rate limiting', 'warning' );
+			wp_send_json_error(
+				array( 'message' => __( 'Too many requests. Please try again later.', 'wp-read-tools' ) ),
+				429 // Too Many Requests
+			);
 		}
 
-		// Check if the post exists and is published (or user has permission to read).
-		$post_status = get_post_status( $post_id );
-		if ( ! $post_status || 'publish' !== $post_status ) {
-			// Add more sophisticated checks if needed (e.g., for private posts and user capabilities).
+		// Access control. This MUST run before the cache lookup: serving a cached
+		// body first would bypass the check entirely whenever a post's visibility
+		// changed without bumping post_modified.
+		if ( ! self::is_post_readable( $post_id ) ) {
 			wp_send_json_error(
 				array( 'message' => __( 'Error: Post not found or not accessible.', 'wp-read-tools' ) ),
 				404 // Not Found
 			);
-			wp_die();
+		}
+
+		// Check cache only after the request is known to be authorized.
+		$cached_content = self::get_cached_content( $post_id );
+		if ( $cached_content !== false ) {
+			wp_read_tools_log( "Serving cached content for post ID: {$post_id}" );
+			wp_send_json_success( array( 'content' => $cached_content ) );
 		}
 
 		// Get the post content - use standard post_content field which contains
 		// the actual article text (including page builder shortcodes with content)
 		$content = get_post_field( 'post_content', $post_id );
+
+		// Cap the amount of content processed per request. Without this an
+		// unbounded post is read, regex-processed and cached on every call,
+		// which is a cheap CPU/memory amplification vector on a public endpoint.
+		$max_length = (int) apply_filters( 'wp_read_tools_max_content_length', 500000, $post_id );
+		if ( $max_length > 0 && is_string( $content ) && strlen( $content ) > $max_length ) {
+			wp_read_tools_log(
+				sprintf( 'Content for post %d truncated from %d to %d bytes', $post_id, strlen( $content ), $max_length ),
+				'warning'
+			);
+			$content = substr( $content, 0, $max_length );
+		}
 
 		wp_read_tools_log( "Retrieved content for post {$post_id}, length: " . strlen($content) );
 
@@ -188,6 +190,60 @@ class WP_Read_Tools_Ajax {
 		wp_send_json_success( array( 'content' => $stripped_content ) );
 
 		// wp_die() is called automatically by wp_send_json_success / wp_send_json_error.
+	}
+
+	/**
+	 * Determines whether a post may be read aloud by the current requester.
+	 *
+	 * This is the endpoint's access-control gate. A bare `post_status === 'publish'`
+	 * test is NOT sufficient:
+	 *
+	 * - Password-protected posts keep the `publish` status (protection lives in
+	 *   `post_password`), so a status-only check hands their plaintext to any
+	 *   anonymous caller.
+	 * - Non-public post types (`wp_block`, field groups, private CPTs) are also
+	 *   commonly stored with the `publish` status and would be readable by
+	 *   enumerating numeric IDs.
+	 *
+	 * @since  1.1.1
+	 * @access private
+	 * @static
+	 *
+	 * @param  int $post_id Post ID to authorize.
+	 * @return bool         True if the post may be returned to this requester.
+	 */
+	private static function is_post_readable( $post_id ) {
+		$post = get_post( $post_id );
+		if ( ! $post ) {
+			return false;
+		}
+
+		// Only expose post types that are publicly queryable. Sites with custom
+		// readable types can widen this deliberately via the filter below.
+		$allowed_types = apply_filters( 'wp_read_tools_allowed_post_types', array( 'post', 'page' ), $post_id );
+		if ( ! in_array( $post->post_type, (array) $allowed_types, true ) ) {
+			return false;
+		}
+
+		// is_post_publicly_viewable() is WP 5.7+; this plugin supports 5.0.
+		if ( function_exists( 'is_post_publicly_viewable' ) ) {
+			if ( ! is_post_publicly_viewable( $post ) ) {
+				return false;
+			}
+		} else {
+			$type_object = get_post_type_object( $post->post_type );
+			if ( ! $type_object || ! $type_object->public || 'publish' !== $post->post_status ) {
+				return false;
+			}
+		}
+
+		// Password-protected content requires the password, which this endpoint
+		// does not accept. Refuse rather than leak.
+		if ( post_password_required( $post ) ) {
+			return false;
+		}
+
+		return true;
 	}
 
 	/**
@@ -317,24 +373,44 @@ class WP_Read_Tools_Ajax {
 		// Create rate limit key
 		$rate_limit_key = 'wp_read_tools_rate_limit_' . md5( $client_ip );
 
-		// Get current request count
-		$request_count = get_transient( $rate_limit_key );
-		if ( $request_count === false ) {
-			$request_count = 0;
-		}
-
 		// Rate limit settings (filterable) - more lenient defaults
 		$max_requests = apply_filters( 'wp_read_tools_rate_limit_max_requests', 60 ); // 60 requests (doubled)
 		$time_window = apply_filters( 'wp_read_tools_rate_limit_time_window', 300 ); // 5 minutes
 
+		// Fixed window. The stored value carries its own start time so that the
+		// TTL is not refreshed on every hit; refreshing it turned this into a
+		// sliding window that could keep a steady low-rate caller blocked
+		// indefinitely once they crossed the threshold.
+		$bucket = get_transient( $rate_limit_key );
+		if ( ! is_array( $bucket ) || ! isset( $bucket['count'], $bucket['start'] ) ) {
+			$bucket = array(
+				'count' => 0,
+				'start' => time(),
+			);
+		}
+
+		$elapsed = time() - (int) $bucket['start'];
+		if ( $elapsed >= $time_window ) {
+			// Previous window expired; start a fresh one.
+			$bucket = array(
+				'count' => 0,
+				'start' => time(),
+			);
+			$elapsed = 0;
+		}
+
 		// Check if limit exceeded
-		if ( $request_count >= $max_requests ) {
+		if ( $bucket['count'] >= $max_requests ) {
 			return false;
 		}
 
-		// Increment request count
-		$request_count++;
-		set_transient( $rate_limit_key, $request_count, $time_window );
+		// Increment request count.
+		// NOTE: read-modify-write via transients is not atomic, so highly
+		// concurrent requests from one key can slightly overshoot the cap. This
+		// is a throttle, not a hard quota; the security boundary is the nonce
+		// and the access-control check, not this counter.
+		$bucket['count']++;
+		set_transient( $rate_limit_key, $bucket, $time_window - $elapsed );
 
 		return true;
 	}
@@ -521,32 +597,50 @@ class WP_Read_Tools_Ajax {
 	 * @return string Client IP address or empty string if unavailable.
 	 */
 	private static function get_client_ip() {
-		// Check for various proxy headers
-		$ip_headers = array(
-			'HTTP_CF_CONNECTING_IP', // Cloudflare
-			'HTTP_X_FORWARDED_FOR', // Standard proxy header
-			'HTTP_X_REAL_IP', // Nginx proxy
-			'REMOTE_ADDR' // Direct connection
-		);
+		$remote_addr = isset( $_SERVER['REMOTE_ADDR'] )
+			? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) )
+			: '';
 
-		foreach ( $ip_headers as $header ) {
-			if ( ! empty( $_SERVER[ $header ] ) ) {
+		// Proxy headers are attacker-controlled unless a proxy in front of the
+		// site overwrites them. Trusting them unconditionally allowed both a
+		// trivial limit bypass (rotate the header) and a denial-of-service
+		// primitive (set the header to a victim's IP to exhaust their bucket).
+		//
+		// Sites genuinely behind a proxy opt in by returning the proxy's own
+		// address(es) from this filter; the header is honoured only when the
+		// immediate peer is one of them.
+		$trusted_proxies = (array) apply_filters( 'wp_read_tools_trusted_proxies', array() );
+
+		if ( ! empty( $trusted_proxies ) && in_array( $remote_addr, $trusted_proxies, true ) ) {
+			$ip_headers = array(
+				'HTTP_CF_CONNECTING_IP', // Cloudflare
+				'HTTP_X_FORWARDED_FOR', // Standard proxy header
+				'HTTP_X_REAL_IP', // Nginx proxy
+			);
+
+			foreach ( $ip_headers as $header ) {
+				if ( empty( $_SERVER[ $header ] ) ) {
+					continue;
+				}
+
 				$ip = sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) );
 
 				// Handle comma-separated IPs (X-Forwarded-For can have multiple IPs)
 				if ( strpos( $ip, ',' ) !== false ) {
 					$ip_list = explode( ',', $ip );
-					$ip = trim( $ip_list[0] ); // Use the first IP
+					$ip = trim( $ip_list[0] ); // Use the client-most IP
 				}
 
-				// Validate IP address
-				if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+				// Private/reserved ranges are legitimate keys here; rejecting
+				// them made the limiter disable itself entirely on containerised
+				// and load-balanced installs, where REMOTE_ADDR is often 10.x.
+				if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
 					return $ip;
 				}
 			}
 		}
 
-		return '';
+		return filter_var( $remote_addr, FILTER_VALIDATE_IP ) ? $remote_addr : '';
 	}
 
 	/**
