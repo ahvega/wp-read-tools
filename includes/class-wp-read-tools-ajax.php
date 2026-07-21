@@ -82,7 +82,11 @@ class WP_Read_Tools_Ajax {
 		// callers create rows in wp_options without presenting a nonce at all.
 		// The nonce name 'read_aloud_nonce' should match the one created in WP_Read_Tools_Enqueue.
 		// The key 'nonce' should match the key sent in the AJAX data from read-aloud.js.
-		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_key( $_POST['nonce'] ), 'read_aloud_nonce' ) ) {
+		// is_string() guards against nonce[]=x, which would otherwise reach
+		// sanitize_key() as an array and raise a TypeError on PHP 8 -- turning a
+		// clean 403 into a 500.
+		if ( ! isset( $_POST['nonce'] ) || ! is_string( $_POST['nonce'] )
+			|| ! wp_verify_nonce( sanitize_key( $_POST['nonce'] ), 'read_aloud_nonce' ) ) {
 			wp_read_tools_log( 'AJAX request failed nonce verification', 'error' );
 			wp_send_json_error(
 				array( 'message' => __( 'Security check failed.', 'wp-read-tools' ) ),
@@ -100,8 +104,9 @@ class WP_Read_Tools_Ajax {
 			);
 		}
 
-		// Sanitize and validate the post ID.
-		$post_id = intval( $_POST['post_id'] );
+		// Sanitize and validate the post ID. is_scalar() rejects post_id[]=x,
+		// which intval() would otherwise silently coerce to 1.
+		$post_id = is_scalar( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
 		if ( $post_id <= 0 ) {
 			wp_send_json_error(
 				array( 'message' => __( 'Error: Invalid post ID.', 'wp-read-tools' ) ),
@@ -143,13 +148,31 @@ class WP_Read_Tools_Ajax {
 		// Cap the amount of content processed per request. Without this an
 		// unbounded post is read, regex-processed and cached on every call,
 		// which is a cheap CPU/memory amplification vector on a public endpoint.
+		// get_post_field() can return a non-string for an invalid field/post;
+		// normalise before any string function runs (strlen( null ) is deprecated
+		// in PHP 8.1 and fatal for an object).
+		if ( ! is_string( $content ) ) {
+			$content = '';
+		}
+
 		$max_length = (int) apply_filters( 'wp_read_tools_max_content_length', 500000, $post_id );
-		if ( $max_length > 0 && is_string( $content ) && strlen( $content ) > $max_length ) {
+		if ( $max_length > 0 && strlen( $content ) > $max_length ) {
 			wp_read_tools_log(
 				sprintf( 'Content for post %d truncated from %d to %d bytes', $post_id, strlen( $content ), $max_length ),
 				'warning'
 			);
-			$content = substr( $content, 0, $max_length );
+
+			// Truncate on a character boundary. A byte-wise substr() can split a
+			// multibyte sequence, and the downstream /u regexes in
+			// process_content_for_speech() return null on malformed UTF-8 --
+			// turning a size cap into an empty response.
+			if ( function_exists( 'mb_strcut' ) ) {
+				$content = mb_strcut( $content, 0, $max_length, 'UTF-8' );
+			} else {
+				$content = substr( $content, 0, $max_length );
+				// Drop a trailing partial sequence left by the byte-wise cut.
+				$content = preg_replace( '/(?:[\xC0-\xFF][\x80-\xBF]*)$/', '', $content );
+			}
 		}
 
 		wp_read_tools_log( "Retrieved content for post {$post_id}, length: " . strlen($content) );
@@ -218,9 +241,16 @@ class WP_Read_Tools_Ajax {
 			return false;
 		}
 
-		// Only expose post types that are publicly queryable. Sites with custom
-		// readable types can widen this deliberately via the filter below.
-		$allowed_types = apply_filters( 'wp_read_tools_allowed_post_types', array( 'post', 'page' ), $post_id );
+		// Default to every publicly-registered type, so custom post types that
+		// worked before this change keep working. This still excludes the
+		// internal types that motivated the check (wp_block, ACF field groups
+		// and similar are registered with 'public' => false). Sites can narrow
+		// or widen it deliberately via the filter.
+		$allowed_types = apply_filters(
+			'wp_read_tools_allowed_post_types',
+			get_post_types( array( 'public' => true ) ),
+			$post_id
+		);
 		if ( ! in_array( $post->post_type, (array) $allowed_types, true ) ) {
 			return false;
 		}
@@ -231,8 +261,16 @@ class WP_Read_Tools_Ajax {
 				return false;
 			}
 		} else {
+			// Mirror is_post_type_viewable(): publicly_queryable, or a builtin
+			// public type. Testing ->public alone would admit types registered
+			// public but not publicly_queryable.
 			$type_object = get_post_type_object( $post->post_type );
-			if ( ! $type_object || ! $type_object->public || 'publish' !== $post->post_status ) {
+			if ( ! $type_object || 'publish' !== $post->post_status ) {
+				return false;
+			}
+			$type_viewable = ! empty( $type_object->publicly_queryable )
+				|| ( ! empty( $type_object->_builtin ) && ! empty( $type_object->public ) );
+			if ( ! $type_viewable ) {
 				return false;
 			}
 		}
@@ -612,30 +650,38 @@ class WP_Read_Tools_Ajax {
 		$trusted_proxies = (array) apply_filters( 'wp_read_tools_trusted_proxies', array() );
 
 		if ( ! empty( $trusted_proxies ) && in_array( $remote_addr, $trusted_proxies, true ) ) {
-			$ip_headers = array(
-				'HTTP_CF_CONNECTING_IP', // Cloudflare
-				'HTTP_X_FORWARDED_FOR', // Standard proxy header
-				'HTTP_X_REAL_IP', // Nginx proxy
-			);
-
-			foreach ( $ip_headers as $header ) {
+			// Single-value headers written by the edge itself. Cloudflare and
+			// nginx overwrite these rather than appending, so the value cannot
+			// carry an attacker-supplied prefix.
+			foreach ( array( 'HTTP_CF_CONNECTING_IP', 'HTTP_X_REAL_IP' ) as $header ) {
 				if ( empty( $_SERVER[ $header ] ) ) {
 					continue;
 				}
-
-				$ip = sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) );
-
-				// Handle comma-separated IPs (X-Forwarded-For can have multiple IPs)
-				if ( strpos( $ip, ',' ) !== false ) {
-					$ip_list = explode( ',', $ip );
-					$ip = trim( $ip_list[0] ); // Use the client-most IP
-				}
-
-				// Private/reserved ranges are legitimate keys here; rejecting
-				// them made the limiter disable itself entirely on containerised
-				// and load-balanced installs, where REMOTE_ADDR is often 10.x.
+				$ip = trim( sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) ) );
 				if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
 					return $ip;
+				}
+			}
+
+			// X-Forwarded-For is APPENDED to, so the leftmost entry is whatever
+			// the client sent and is fully attacker-controlled even behind a
+			// trusted proxy. Walk right-to-left, discarding known proxies; the
+			// first non-proxy address is the real peer.
+			if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+				$forwarded = sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) );
+				$parts     = array_map( 'trim', explode( ',', $forwarded ) );
+
+				for ( $i = count( $parts ) - 1; $i >= 0; $i-- ) {
+					if ( in_array( $parts[ $i ], $trusted_proxies, true ) ) {
+						continue;
+					}
+					// Private/reserved ranges are legitimate keys here; rejecting
+					// them made the limiter disable itself entirely on
+					// containerised installs where the peer is often 10.x.
+					if ( filter_var( $parts[ $i ], FILTER_VALIDATE_IP ) ) {
+						return $parts[ $i ];
+					}
+					break; // First non-proxy entry was malformed; do not trust further left.
 				}
 			}
 		}
